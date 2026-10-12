@@ -435,6 +435,11 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 
   <div id="nextUp" class="strip" hidden></div>
   <div id="stuckBar" class="strip warn" hidden></div>
+  <div id="payBanner" class="strip warn" hidden>
+    <span class="tag">Настройка</span>
+    <span class="txt">Укажите свой процент от маржи, оклад и график работы, иначе доход считается неверно.</span>
+    <button class="push" id="payBannerBtn" type="button">Настроить</button>
+  </div>
   <div id="demoBanner" class="strip warn" hidden>
     <span class="tag">Примеры</span>
     <span class="txt">В журнале есть тестовые записи. Они не ваши, удалите их перед началом работы.</span>
@@ -445,7 +450,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     <div class="kpi hero">
       <div class="k" id="kpiIncomeLabel">Ваш доход</div>
       <div class="v mono" id="kpiIncome">0,00 BYN</div>
-      <div class="s" id="kpiIncomeSub">10% от маржи оплаченных сделок</div>
+      <div class="s" id="kpiIncomeSub">Ваш процент от маржи оплаченных сделок</div>
     </div>
     <div class="kpi"><div class="k">Выручка</div><div class="v mono" id="kpiRevenue">0,00 BYN</div><div class="s" id="kpiRevenueSub">&nbsp;</div></div>
     <div class="kpi"><div class="k">Маржа</div><div class="v mono" id="kpiMargin">0,00 BYN</div><div class="s" id="kpiMarginSub">&nbsp;</div></div>
@@ -453,7 +458,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   </section>
 
   <section class="card" id="earnCard" aria-label="Заработано и потенциал">
-    <div class="card-head"><h2>Заработано и потенциал</h2><span class="muted" style="font-size:13px">ваши 10% от маржи</span></div>
+    <div class="card-head"><h2>Заработано и потенциал</h2><span class="muted" style="font-size:13px">ваш процент от маржи</span></div>
     <div class="tablewrap" id="earnTable"></div>
     <p class="earnnote">Заработано: сделки со статусом «Оплачено», по дате оплаты. Ожидается: сделки в работе (Закупка, Доставка), В итогах месяца они считаются в текущем месяце, даже если оформлены раньше. В строках «Сегодня» и «Эта неделя» они стоят по дате согласия клиента. Рекламации и отказы не учитываются.</p>
   </section>
@@ -573,10 +578,14 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       <div class="card-head"><h2 id="hoursTitle">Часы и оклад</h2><button class="btn ghost" id="payToggle" type="button" aria-expanded="false">Оклад и смена</button></div>
       <form id="payForm" class="settings" style="margin:0 0 14px;padding-top:0;border-top:0" autocomplete="off" hidden>
         <div class="form">
+          <div class="field"><label for="payRate">Ваш процент от маржи, %</label><input id="payRate" class="mono" type="number" min="0" max="100" step="0.1" inputmode="decimal"></div>
           <div class="field"><label for="payOklad">Оклад за полную норму, BYN</label><input id="payOklad" class="mono" type="number" min="0" step="1" inputmode="decimal"></div>
           <div class="field"><label for="payShift">Часов в смене (без обеда)</label><input id="payShift" class="mono" type="number" min="1" max="24" step="0.5" inputmode="decimal"></div>
+          <div class="field"><label for="payPreset">График работы</label><select id="payPreset"></select></div>
+          <div class="field" id="payCustomWrap" hidden><label for="payCycle">Свой цикл: 1 рабочий, 0 выходной</label><input id="payCycle" class="mono" placeholder="11001110011000"></div>
+          <div class="field"><label for="payAnchor">Первый день цикла (дата)</label><input id="payAnchor" type="date"></div>
           <div class="btns"><button class="btn" type="submit">Сохранить</button></div>
-          <p class="note">График 2/2/3: два рабочих, два выходных, три рабочих, потом два выходных, два рабочих, три выходных, и так по кругу. Норма месяца считается по графику, оклад выплачивается пропорционально отработанным часам.</p>
+          <p class="note">Как задать график: выберите схему и дату, с которой начинается её первый день. Например, для 2/2 это день, когда вы вышли после выходных. Для схем «с понедельника» укажите любой понедельник. Свой цикл вводится цифрами по дням: 11001 значит два рабочих, два выходных, один рабочий. Для графика 2/2/3: «11001110011000», дата 21.09.2026. Норма месяца считается по графику, оклад выплачивается пропорционально отработанным часам. Конкретный день всегда можно поправить в календаре.</p>
         </div>
       </form>
       <div class="paygrid" id="payGrid"></div>
@@ -607,7 +616,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
         <div class="card-head"><h2>Доход по месяцам</h2><span class="muted" style="font-size:13px">последние 6 месяцев</span></div>
         <div class="chart" id="chartMonths" role="img" aria-label="Столбчатая диаграмма дохода по месяцам"></div><div class="legendrow"><span class="lg"><i class="a"></i>оплачено</span><span class="lg"><i class="b"></i>ожидается</span></div>
       </div>
-      <div class="card full"><div class="card-head"><h2>Категории</h2><span class="muted" style="font-size:13px">ваши 10%, доля месяца и маржа в % от выручки</span></div><div class="rank" id="rankCats"></div></div>
+      <div class="card full"><div class="card-head"><h2>Категории</h2><span class="muted" style="font-size:13px">ваш процент, доля месяца и маржа в % от выручки</span></div><div class="rank" id="rankCats"></div></div>
       <div class="card"><h2>Товары</h2><div class="rank" id="rankProducts"></div></div>
       <div class="card"><h2>Покупатели</h2><div class="rank" id="rankClients"></div></div>
     </div>
@@ -646,7 +655,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
 <script>
 (function () {
   "use strict";
-  var RATE = 0.10, CUR = "BYN";
+  var CUR = "BYN";
+  function rateK() { var r = state.pay ? Number(state.pay.rate) : NaN; return (isFinite(r) && r >= 0 ? r : 10) / 100; }
   var MONTHS = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
   var MON_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
   var WD = ["вс","пн","вт","ср","чт","пт","сб"];
@@ -738,12 +748,12 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function calcItem(it) {
     var qty = Number(it.qty) || 0, buy = Number(it.buy) || 0, sell = Number(it.sell) || 0;
     var revenue = sell * qty, cost = buy * qty, margin = revenue - cost;
-    return { revenue: revenue, cost: cost, margin: margin, income: margin * RATE };
+    return { revenue: revenue, cost: cost, margin: margin, income: margin * rateK() };
   }
   function calc(s) {
     var t = { revenue: 0, cost: 0, margin: 0, income: 0 };
     itemsOf(s).forEach(function (it) { var c = calcItem(it); t.revenue += c.revenue; t.cost += c.cost; t.margin += c.margin; });
-    t.income = t.margin * RATE;
+    t.income = t.margin * rateK();
     return t;
   }
   function expOf(s) { return Number(s.expense) || 0; }
@@ -1332,18 +1342,29 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function renderAll() {
     buildIndex();
     renderHeader(); renderGoal(); renderKpi(); renderEarn(); renderNextUp(); renderStuck(); renderTasks(); renderSales(); renderClients(); renderHours(); renderStats();
+    $("payBanner").hidden = !(state.pay.loaded && !state.pay.saved);
     $("demoBanner").hidden = !(state.tasks.concat(state.sales).some(function (x) { return x.demo; }));
   }
 
 
   /* ---------- hours and salary ---------- */
   /* Schedule 2/2/3 over a 14-day cycle: W = shift, O = day off. Day 0 of the cycle is anchored so that 1 Oct 2026 is a shift followed by 3 days off. */
-  var PATTERN = "WWOOWWWOOWWOOO";
-  state.pay = { salary: 1500, shiftHours: 11, anchor: "2026-09-21" };
+  var PRESETS = [
+    { id: "223", name: "2/2/3 (чередование недель)", cycle: "11001110011000" },
+    { id: "22", name: "2/2", cycle: "1100" },
+    { id: "33", name: "3/3", cycle: "111000" },
+    { id: "13", name: "1/3", cycle: "1000" },
+    { id: "52", name: "5/2 (пн–пт, начало с понедельника)", cycle: "1111100", monday: true },
+    { id: "61", name: "6/1 (начало с понедельника)", cycle: "1111110", monday: true },
+    { id: "custom", name: "Свой цикл", cycle: "" }
+  ];
+  state.pay = { salary: 0, shiftHours: 8, anchor: "2026-09-21", cycle: "1111100", rate: 10, saved: false, loaded: false };
+  function normCycle(v) { return String(v || "").replace(/[\s,;.\-/]+/g, "").replace(/[РрRrWw]/g, "1").replace(/[ВвOo]/g, "0"); }
   state.shifts = {};
   function plannedHours(dstr) {
-    var diff = Math.round((parseDay(dstr) - parseDay(state.pay.anchor)) / 86400000), i = ((diff % 14) + 14) % 14;
-    return PATTERN.charAt(i) === "W" ? Number(state.pay.shiftHours) || 0 : 0;
+    var cy = state.pay.cycle || "1111100", n = cy.length;
+    var diff = Math.round((parseDay(dstr) - parseDay(state.pay.anchor)) / 86400000), i = ((diff % n) + n) % n;
+    return cy.charAt(i) === "1" ? Number(state.pay.shiftHours) || 0 : 0;
   }
   function hoursOn(dstr) { var o = state.shifts[dstr]; return o != null ? Number(o) || 0 : plannedHours(dstr); }
   /* Past shifts count as worked as planned unless changed; today counts after the shift ends at 21:00. */
@@ -1473,16 +1494,37 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     if (!isFinite(v) || v < 0 || v > 24) { toast("Часы от 0 до 24"); return; }
     saveShift(ds, Math.round(v * 2) / 2); toast("Часы сохранены");
   });
-  $("payToggle").addEventListener("click", function () {
-    var f = $("payForm"), open = f.hidden;
-    if (open) { $("payOklad").value = state.pay.salary; $("payShift").value = state.pay.shiftHours; }
-    f.hidden = !open; this.setAttribute("aria-expanded", String(open));
+  function fillPayForm() {
+    var p = state.pay, sel = $("payPreset");
+    if (!sel.options.length) sel.innerHTML = PRESETS.map(function (x) { return '<option value="' + x.id + '">' + esc(x.name) + "</option>"; }).join("");
+    var pr = PRESETS.filter(function (x) { return x.cycle === p.cycle; })[0] || PRESETS[PRESETS.length - 1];
+    sel.value = pr.id; $("payCycle").value = p.cycle; $("payCustomWrap").hidden = pr.id !== "custom";
+    $("payRate").value = p.rate; $("payOklad").value = p.salary; $("payShift").value = p.shiftHours; $("payAnchor").value = p.anchor;
+  }
+  function openPay(open) {
+    var f = $("payForm");
+    if (open) fillPayForm();
+    f.hidden = !open; $("payToggle").setAttribute("aria-expanded", String(open));
+  }
+  $("payToggle").addEventListener("click", function () { openPay($("payForm").hidden); });
+  $("payBannerBtn").addEventListener("click", function () { setTab("hours"); openPay(true); $("payForm").scrollIntoView && $("payForm").scrollIntoView(); });
+  $("payPreset").addEventListener("change", function () {
+    var pr = PRESETS.filter(function (x) { return x.id === this.value; }, this)[0];
+    $("payCustomWrap").hidden = pr.id !== "custom";
+    if (pr.id !== "custom") $("payCycle").value = pr.cycle;
+    if (pr.monday) { var d = new Date(); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); $("payAnchor").value = ymd(d); }
   });
   $("payForm").addEventListener("submit", function (e) {
     e.preventDefault(); if (!needDb()) return;
-    var sal = Math.max(0, Number($("payOklad").value) || 0), sh = Math.max(1, Math.min(24, Number($("payShift").value) || 11));
-    state.db.doc("settings/pay").set({ salary: sal, shiftHours: sh, anchor: state.pay.anchor, updatedAt: Date.now() }).then(function () {
-      state.pay.salary = sal; state.pay.shiftHours = sh; $("payForm").hidden = true; $("payToggle").setAttribute("aria-expanded", "false"); toast("Сохранено"); renderAll();
+    var sal = Math.max(0, Number($("payOklad").value) || 0), sh = Math.max(1, Math.min(24, Number($("payShift").value) || 8));
+    var rate = Math.max(0, Math.min(100, Number($("payRate").value) || 0));
+    var cy = normCycle($("payCycle").value), anchor = $("payAnchor").value;
+    if (!/^[01]{2,28}$/.test(cy) || cy.indexOf("1") < 0) { toast("Цикл: от 2 до 28 цифр, 1 рабочий, 0 выходной"); return; }
+    if (!anchor) { toast("Укажите дату первого дня цикла"); return; }
+    var rec = { salary: sal, shiftHours: sh, rate: rate, cycle: cy, anchor: anchor, updatedAt: Date.now() };
+    state.db.doc("settings/pay").set(rec).then(function () {
+      state.pay = { salary: sal, shiftHours: sh, rate: rate, cycle: cy, anchor: anchor, saved: true, loaded: true };
+      openPay(false); toast("Сохранено"); renderAll();
     }, fail);
   });
 
@@ -1838,7 +1880,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     if (!state.downloads) { toast("Скачивание недоступно в этом окне"); return; }
     if (!list.length) { toast("Нет продаж для выгрузки"); return; }
     var q = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
-    var rows = [["Дата", "Покупатель", "Телефон", "Сделка", "Статус", "Дата оплаты", "Категория", "Товар", "Кол-во", "Закуп за шт.", "Продажа за шт.", "Маржа", "Доход 10%", "Расходы по сделке"].map(q).join(";")];
+    var rows = [["Дата", "Покупатель", "Телефон", "Сделка", "Статус", "Дата оплаты", "Категория", "Товар", "Кол-во", "Закуп за шт.", "Продажа за шт.", "Маржа", "Доход", "Расходы по сделке"].map(q).join(";")];
     list.slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; }).forEach(function (s) {
       itemsOf(s).forEach(function (it, i) {
         var c = calcItem(it);
@@ -1872,7 +1914,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       state.db.collection("shifts").onSnapshot(function (snap) { var m = {}; docs(snap).forEach(function (x) { if (x.date) m[x.date] = x.hours; }); state.shifts = m; renderAll(); }, function () {});
       state.db.doc("settings/pay").onSnapshot(function (snap) {
         var d = snap.exists ? (snap.data() || {}) : {};
-        state.pay = { salary: d.salary == null ? 1500 : Number(d.salary) || 0, shiftHours: d.shiftHours == null ? 11 : Number(d.shiftHours) || 11, anchor: d.anchor || "2026-09-21" };
+        state.pay = { salary: d.salary == null ? 0 : Number(d.salary) || 0, shiftHours: d.shiftHours == null ? 8 : Number(d.shiftHours) || 8, rate: d.rate == null ? 10 : Number(d.rate), cycle: /^[01]{2,28}$/.test(d.cycle || "") ? d.cycle : "1111100", anchor: d.anchor || "2026-09-21", saved: !!snap.exists, loaded: true };
         renderAll();
       }, function () {});
       state.db.doc("settings/main").onSnapshot(function (snap) {
