@@ -1,0 +1,1888 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Журнал продаж</title>
+<meta name="theme-color" content="#2a78d6">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Продажи">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="config.js"></script>
+<script src="backend.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: one narrow column ledger. Summary on top (goal + income + next task), search, then four tabs: Задачи, Продажи, Клиенты, Статистика. Deal stages carry their own colors. */
+:root {
+  --font-sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --bg: #f3f5f7;
+  --surface: #ffffff;
+  --surface-2: #f7f9fb;
+  --ink: #101418;
+  --ink-2: #4a525a;
+  --muted: #76808a;
+  --line: #e0e5ea;
+  --accent: #2a78d6;
+  --accent-ink: #ffffff;
+  --accent-soft: #e7f0fc;
+  --series: #2a78d6;
+  --series-dim: #9ec5f4;
+  --good: #0b7a3e;
+  --bad: #c93434;
+  --warn: #a35f00;
+  --warn-soft: #fff1da;
+  --bad-soft: #fde8e8;
+  --s-new: #2a78d6;  --s-new-bg: #e7f0fc;
+  --s-buy: #a35f00;  --s-buy-bg: #fff1da;
+  --s-ship: #6a4bc4; --s-ship-bg: #efeafc;
+  --s-paid: #0b7a3e; --s-paid-bg: #e2f5ea;
+  --s-claim: #c93434; --s-claim-bg: #fde8e8;
+  --s-off: #5d6770;  --s-off-bg: #eceff2;
+  --shadow: 0 1px 2px rgba(16, 20, 24, 0.06);
+  --scrim: rgba(16, 20, 24, 0.5);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1114;
+    --surface: #171b20;
+    --surface-2: #1c2127;
+    --ink: #eef1f4;
+    --ink-2: #b4bcc4;
+    --muted: #84909a;
+    --line: #272d34;
+    --accent: #3987e5;
+    --accent-ink: #0b0f13;
+    --accent-soft: #16283d;
+    --series: #3987e5;
+    --series-dim: #1c5cab;
+    --good: #3ecf7a;
+    --bad: #ee7373;
+    --warn: #e6a73a;
+    --warn-soft: #302410;
+    --bad-soft: #351919;
+    --s-new: #5a9df0;  --s-new-bg: #16283d;
+    --s-buy: #e6a73a;  --s-buy-bg: #302410;
+    --s-ship: #a692f0; --s-ship-bg: #251f40;
+    --s-paid: #3ecf7a; --s-paid-bg: #13301f;
+    --s-claim: #ee7373; --s-claim-bg: #351919;
+    --s-off: #9aa5af;  --s-off-bg: #242a30;
+    --shadow: none;
+    --scrim: rgba(0, 0, 0, 0.65);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1114;
+  --surface: #171b20;
+  --surface-2: #1c2127;
+  --ink: #eef1f4;
+  --ink-2: #b4bcc4;
+  --muted: #84909a;
+  --line: #272d34;
+  --accent: #3987e5;
+  --accent-ink: #0b0f13;
+  --accent-soft: #16283d;
+  --series: #3987e5;
+  --series-dim: #1c5cab;
+  --good: #3ecf7a;
+  --bad: #ee7373;
+  --warn: #e6a73a;
+  --warn-soft: #302410;
+  --bad-soft: #351919;
+  --s-new: #5a9df0;  --s-new-bg: #16283d;
+  --s-buy: #e6a73a;  --s-buy-bg: #302410;
+  --s-ship: #a692f0; --s-ship-bg: #251f40;
+  --s-paid: #3ecf7a; --s-paid-bg: #13301f;
+  --s-claim: #ee7373; --s-claim-bg: #351919;
+  --s-off: #9aa5af;  --s-off-bg: #242a30;
+  --shadow: none;
+    --scrim: rgba(0, 0, 0, 0.65);
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.45;
+  padding-inline: 16px;
+  padding-block: 20px 56px;
+}
+.wrap { max-width: 880px; margin-inline: auto; display: flex; flex-direction: column; gap: 16px; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: 22px; font-weight: 600; letter-spacing: -0.01em; text-wrap: balance; }
+h2 { font-size: 15px; font-weight: 600; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* stage colors */
+.s-new { --c: var(--s-new); --cbg: var(--s-new-bg); }
+.s-buy { --c: var(--s-buy); --cbg: var(--s-buy-bg); }
+.s-ship { --c: var(--s-ship); --cbg: var(--s-ship-bg); }
+.s-paid { --c: var(--s-paid); --cbg: var(--s-paid-bg); }
+.s-claim { --c: var(--s-claim); --cbg: var(--s-claim-bg); }
+.s-off { --c: var(--s-off); --cbg: var(--s-off-bg); }
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 12px; font-weight: 600; color: var(--c); background: var(--cbg); white-space: nowrap; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--c); margin-right: 6px; }
+
+/* header */
+.top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.top .sub { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.monthnav { display: flex; align-items: center; gap: 4px; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 3px; }
+.monthnav button { width: 32px; height: 32px; border: 0; background: transparent; border-radius: 6px; font-size: 18px; color: var(--ink-2); }
+.monthnav button:hover { background: var(--surface-2); }
+.monthnav .label { min-width: 118px; text-align: center; font-weight: 500; text-transform: capitalize; }
+
+/* strips */
+.strip { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; }
+.strip.warn { background: var(--warn-soft); border-color: transparent; color: var(--warn); }
+.strip .tag { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; }
+.strip .txt { min-width: 0; overflow-wrap: anywhere; color: var(--ink); }
+.strip.warn .txt { color: var(--ink); }
+.strip .push { margin-left: auto; }
+.strip button { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 5px 10px; font-size: 13px; }
+
+/* KPI */
+.kpis { display: grid; grid-template-columns: 1.4fr 1fr 1fr 1fr; gap: 12px; }
+.kpi { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow); min-width: 0; }
+.kpi .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.kpi .v { font-size: 22px; font-weight: 600; margin-top: 4px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.kpi .s { font-size: 13px; color: var(--muted); margin-top: 2px; }
+.kpi.hero { background: var(--accent); border-color: transparent; color: var(--accent-ink); }
+.kpi.hero .k, .kpi.hero .s { color: inherit; opacity: 0.85; }
+.kpi.hero .v { font-size: 32px; }
+.delta-up { color: var(--good); }
+.delta-down { color: var(--bad); }
+.kpi.hero .s .delta { font-weight: 600; }
+
+/* goal card */
+.goal .card-head { margin-bottom: 10px; }
+.gtop { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: 15px; }
+.gpct { font-weight: 600; }
+.gbar { display: flex; height: 10px; border-radius: 5px; background: var(--surface-2); border: 1px solid var(--line); overflow: hidden; }
+.gbar .f1 { background: var(--accent); }
+.gbar .f2 { background: var(--series-dim); }
+.gmeta { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 10px; font-size: 13px; color: var(--ink-2); }
+.goal .legend { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.gwrap { position: relative; }
+.gmark { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; background: var(--ink); border-radius: 1px; }
+.fcgrid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 10px; margin-top: 14px; }
+.fc { border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; background: var(--surface-2); min-width: 0; }
+.fc.main { background: var(--accent-soft); border-color: transparent; }
+.fc .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.fc .v { font-size: 22px; font-weight: 600; margin-top: 4px; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.fc .s { font-size: 13px; color: var(--ink-2); margin-top: 4px; }
+.fc .d { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.fc .ok { color: var(--good); font-weight: 600; }
+.fc .lack { color: var(--warn); font-weight: 600; }
+
+/* earned vs potential */
+table.earn { min-width: 440px; }
+table.earn td.pend, table.earn th.pend { color: var(--accent); }
+table.earn td small { display: block; font-family: var(--font-sans); font-size: 12px; color: var(--muted); font-weight: 400; }
+table.earn td.per small { font-family: var(--font-sans); }
+table.earn tr.cur td { background: var(--surface-2); }
+.earnnote { font-size: 12px; color: var(--muted); margin-top: 10px; }
+.lg { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); margin-right: 14px; }
+.lg i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.lg i.a { background: var(--series); }
+.lg i.b { background: var(--series-dim); }
+.legendrow { margin-top: 6px; }
+.settings { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.settings .btns { display: flex; gap: 8px; align-items: end; }
+.note { font-size: 12px; color: var(--muted); grid-column: 1 / -1; }
+
+/* search */
+.search { display: flex; gap: 8px; align-items: center; }
+.search input { flex: 1; min-width: 0; height: 40px; padding: 0 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.search input:focus { border-color: var(--accent); }
+
+/* tabs */
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabs button { border: 0; background: transparent; padding: 10px 14px; font-weight: 500; color: var(--muted); border-bottom: 2px solid transparent; margin-bottom: -1px; white-space: nowrap; }
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.tabs button .n { font-family: var(--font-mono); font-size: 12px; margin-left: 6px; color: var(--muted); }
+
+/* cards and forms */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; box-shadow: var(--shadow); min-width: 0; }
+.card > h2 { margin-bottom: 12px; }
+.form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; align-items: end; }
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field.wide { grid-column: span 2; }
+.field label { font-size: 12px; color: var(--muted); }
+.field input { width: 100%; min-width: 0; height: 38px; padding: 0 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.field input:focus { border-color: var(--accent); background: var(--surface); }
+.btn { height: 38px; padding: 0 16px; border-radius: 6px; border: 1px solid transparent; background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn:hover { filter: brightness(1.06); }
+.btn.ghost { background: transparent; border-color: var(--line); color: var(--ink); font-weight: 500; }
+.preview { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 20px; font-size: 14px; padding: 10px 12px; background: var(--accent-soft); border-radius: 6px; }
+.preview b { font-weight: 600; }
+.hint { grid-column: 1 / -1; font-size: 13px; color: var(--ink-2); background: var(--accent-soft); padding: 8px 12px; border-radius: 6px; }
+.warnline { color: var(--warn); font-weight: 600; }
+.form-actions { display: flex; align-items: end; }
+.field select { width: 100%; min-width: 0; height: 38px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface-2); }
+.field select:focus { border-color: var(--accent); background: var(--surface); }
+.items { display: flex; flex-direction: column; gap: 12px; margin-top: 14px; }
+.item { border: 1px solid var(--line); border-radius: 8px; padding: 12px; background: var(--surface-2); }
+.item .field input, .item .field select { background: var(--surface); }
+.item-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; align-items: end; }
+.item-grid .field.wide { grid-column: span 2; }
+.item-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
+.items-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+td.itemcell .line { display: block; margin-bottom: 4px; }
+td.itemcell .line:last-child { margin-bottom: 0; }
+td.itemcell .cat { display: block; font-size: 12px; color: var(--muted); }
+
+/* filters */
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.chip { border: 1px solid var(--line); background: var(--surface); border-radius: 999px; padding: 5px 12px; font-size: 13px; color: var(--ink-2); }
+.chip[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.filters input[type="date"] { height: 32px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+
+/* stage tiles */
+.stages { display: grid; grid-template-columns: repeat(auto-fit, minmax(112px, 1fr)); gap: 8px; }
+.stage { display: flex; flex-direction: column; gap: 2px; align-items: flex-start; text-align: left; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); min-width: 0; }
+.stage[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.stage .l { font-size: 12px; color: var(--muted); display: flex; align-items: center; }
+.stage .n { font-family: var(--font-mono); font-weight: 600; font-size: 20px; line-height: 1.2; }
+.stage .amt { font-family: var(--font-mono); font-size: 12px; color: var(--ink-2); min-height: 17px; }
+
+/* task list */
+.group { display: flex; flex-direction: column; gap: 8px; }
+.group > h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; display: flex; gap: 8px; align-items: baseline; }
+.group.overdue > h3 { color: var(--bad); }
+.task { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: start; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; }
+.task.overdue { border-left: 3px solid var(--bad); }
+.task .when { font-family: var(--font-mono); font-size: 13px; text-align: right; min-width: 56px; color: var(--ink-2); padding-top: 1px; }
+.task.overdue .when { color: var(--bad); }
+.task .when small { display: block; color: var(--muted); font-size: 11px; }
+.task .body { min-width: 0; }
+.task .act { font-weight: 500; overflow-wrap: anywhere; }
+.task .meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 4px; font-size: 13px; color: var(--ink-2); align-items: center; }
+.task .meta .deal { font-family: var(--font-mono); background: var(--surface-2); padding: 1px 6px; border-radius: 4px; border: 1px solid var(--line); }
+.deal-link { text-decoration: none; color: var(--accent); }
+.deal-link:hover { text-decoration: underline; }
+td .sub a.deal-link { font-family: var(--font-mono); }
+.task .meta .phone { font-family: var(--font-mono); user-select: all; }
+.task .meta .auto { font-size: 12px; color: var(--accent); }
+.task .copy { border: 0; background: transparent; color: var(--accent); padding: 0 2px; font-size: 12px; }
+.task .ops { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 230px; }
+.icon-btn { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; height: 32px; padding: 0 10px; font-size: 13px; color: var(--ink-2); white-space: nowrap; }
+.icon-btn.sm { height: 28px; padding: 0 8px; font-size: 12px; }
+.icon-btn.done { color: var(--good); border-color: currentColor; }
+.icon-btn.armed { color: var(--bad); border-color: currentColor; }
+.icon-btn.next { color: var(--accent); border-color: currentColor; }
+details.finished > summary { cursor: pointer; color: var(--muted); font-size: 13px; padding: 6px 0; }
+.task.is-done .act { text-decoration: line-through; color: var(--muted); }
+
+/* sales table */
+.tablewrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.sales { min-width: 940px; }
+th { text-align: left; font-weight: 500; font-size: 12px; color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td .sub { display: block; color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+td .sub.low { color: var(--warn); font-weight: 600; }
+td .pend { color: var(--muted); }
+td.stcell { min-width: 150px; }
+td.stcell .sub { font-family: var(--font-sans); margin-top: 3px; }
+td.stcell .next { margin-top: 6px; }
+td.actcell { white-space: nowrap; }
+tr.stuck td { background: var(--warn-soft); }
+tr.stuck td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
+td.actcell .icon-btn { display: block; margin-bottom: 4px; }
+tfoot td { font-weight: 600; border-bottom: 0; background: var(--surface-2); }
+.neg { color: var(--bad); }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.card-head h2 { margin: 0; }
+.btnrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.cal .wd { font-size: 11px; color: var(--muted); text-align: center; text-transform: uppercase; letter-spacing: 0.05em; padding: 2px 0; }
+.cal .day { min-height: 54px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 4px 5px; text-align: left; display: flex; flex-direction: column; justify-content: space-between; min-width: 0; }
+.cal .day.blank { border: 0; background: transparent; }
+.cal .day .dn { font-size: 12px; color: var(--muted); }
+.cal .day .hh { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+.cal .day.work { background: var(--accent-soft); border-color: transparent; }
+.cal .day.off .hh { color: var(--muted); font-weight: 400; }
+.cal .day.changed { box-shadow: inset 0 0 0 2px var(--warn); }
+.cal .day.extra { background: var(--s-paid-bg); border-color: transparent; }
+.cal .day.today .dn { color: var(--ink); font-weight: 700; }
+.cal .day.sel { outline: 2px solid var(--accent); }
+.cal .day.future .hh { opacity: 0.75; }
+.advice { margin-top: 14px; padding: 12px 14px; border-radius: 8px; background: var(--accent-soft); font-size: 14px; }
+.advice h3 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 6px; }
+.advice .ok { color: var(--good); }
+.advice .lack { color: var(--warn); }
+.advice .advrow { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; padding: 5px 0; border-top: 1px solid var(--line); }
+.cal .day.sug { box-shadow: inset 0 0 0 2px var(--accent); }
+.hrow { display: flex; gap: 8px; flex-wrap: wrap; align-items: end; margin-top: 12px; padding: 12px; background: var(--surface-2); border-radius: 8px; }
+.hrow .field { width: 130px; }
+.paygrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.paygrid .t { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; background: var(--surface-2); min-width: 0; }
+.paygrid .t .k { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+.paygrid .t .v { font-size: 18px; font-weight: 600; margin-top: 3px; overflow-wrap: anywhere; }
+.paygrid .t .s { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.sortsel { height: 38px; padding: 0 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); max-width: 100%; }
+.stsel { height: 30px; padding: 0 6px; border-radius: 999px; border: 1px solid transparent; font-size: 13px; font-weight: 600; color: var(--c); background: var(--cbg); max-width: 100%; }
+
+/* clients */
+.clients { display: flex; flex-direction: column; gap: 8px; }
+.client { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.client-head { display: grid; grid-template-columns: 1fr auto; gap: 4px 12px; width: 100%; text-align: left; border: 0; background: transparent; padding: 12px 14px; }
+.client-head .nm { font-weight: 600; overflow-wrap: anywhere; }
+.client-head .ph { font-family: var(--font-mono); font-size: 13px; color: var(--ink-2); }
+.client-head .meta { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--ink-2); }
+.client-head .inc { text-align: right; font-family: var(--font-mono); font-weight: 600; }
+.client-head .inc small { display: block; font-family: var(--font-sans); font-weight: 400; font-size: 12px; color: var(--muted); }
+.client-body { padding: 0 14px 14px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.client-body h3 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+.cl-line { display: grid; grid-template-columns: auto 1fr auto auto; gap: 4px 12px; align-items: baseline; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.cl-line:last-child { border-bottom: 0; }
+.cl-line .it { min-width: 0; overflow-wrap: anywhere; }
+.cl-line .it small { display: block; color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+
+/* stats */
+.stats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.stats .full { grid-column: 1 / -1; }
+table.cmp { min-width: 0; }
+.chart { position: relative; width: 100%; }
+.chart svg { display: block; }
+.chart .axis, .chart .tick { fill: var(--muted); font-size: 11px; font-family: var(--font-mono); }
+.chart .grid { stroke: var(--line); stroke-width: 1; }
+.chart .base { stroke: var(--muted); stroke-width: 1; opacity: 0.5; }
+.chart .bar { fill: var(--series); }
+.chart .bar.pend { fill: var(--series-dim); }
+.chart .bar.faded { fill-opacity: 0.5; }
+.chart .hit:hover + .bar, .chart .hit.on + .bar { filter: brightness(1.12); }
+.chart .peak { fill: var(--ink); font-size: 11px; font-weight: 600; font-family: var(--font-mono); }
+.tip { position: absolute; z-index: 5; pointer-events: none; background: var(--ink); color: var(--bg); border-radius: 6px; padding: 6px 9px; font-size: 12px; line-height: 1.35; white-space: nowrap; transform: translate(-50%, -100%); opacity: 0; }
+.tip.on { opacity: 1; }
+.rank { display: flex; flex-direction: column; gap: 10px; }
+.rank .row { display: grid; grid-template-columns: minmax(80px, 1fr) minmax(60px, 1.4fr) auto; gap: 10px; align-items: center; font-size: 14px; }
+.rank .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rank .track { height: 10px; background: var(--surface-2); border-radius: 0 4px 4px 0; border-left: 1px solid var(--muted); }
+.rank .fill { height: 100%; background: var(--series); border-radius: 0 4px 4px 0; }
+.rank .fill.st { background: var(--c); }
+.rank .val { font-family: var(--font-mono); font-size: 13px; text-align: right; white-space: nowrap; }
+.empty { text-align: center; color: var(--muted); padding: 28px 12px; font-size: 14px; }
+.empty b { display: block; color: var(--ink); font-weight: 600; margin-bottom: 4px; font-size: 15px; }
+
+.toast { position: fixed; left: 50%; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); background: var(--ink); color: var(--bg); padding: 9px 16px; border-radius: 8px; font-size: 14px; opacity: 0; pointer-events: none; transition: opacity 0.2s; z-index: 40; max-width: calc(100vw - 32px); text-align: center; }
+.toast.on { opacity: 1; }
+
+/* edit sale sheet */
+.scrim { position: fixed; inset: 0; z-index: 30; background: var(--scrim); display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: calc(16px + env(safe-area-inset-top, 0px)) 16px calc(16px + env(safe-area-inset-bottom, 0px)); }
+.sheet { width: 100%; max-width: 760px; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 16px 48px var(--scrim); padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.sheet-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.sheet-head p { margin-top: 2px; }
+.sheet-foot { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.sheet .items { margin-top: 0; }
+
+@media (max-width: 720px) {
+  .kpis { grid-template-columns: 1fr 1fr; }
+  .kpi.hero { grid-column: 1 / -1; }
+  .fcgrid { grid-template-columns: 1fr; }
+  .paygrid { grid-template-columns: 1fr 1fr; }
+  .cal .day { min-height: 46px; padding: 3px 4px; }
+  .stats { grid-template-columns: 1fr; }
+  .field.wide { grid-column: 1 / -1; }
+  .task { grid-template-columns: 1fr auto; }
+  .task .when { grid-column: 1 / -1; text-align: left; display: flex; gap: 8px; }
+  .task .when small { display: inline; }
+  .task .ops { max-width: 150px; }
+  .cl-line { grid-template-columns: auto 1fr; }
+  .cl-line .pill, .cl-line .mono.amt { justify-self: start; }
+}
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+</style>
+
+<style>
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Журнал продаж</h1>
+      <p class="sub" id="today"></p>
+    </div>
+    <div class="monthnav">
+      <button id="prevMonth" type="button" aria-label="Предыдущий месяц">‹</button>
+      <span class="label" id="monthLabel"></span>
+      <button id="nextMonth" type="button" aria-label="Следующий месяц">›</button>
+    </div>
+  </header>
+
+  <div id="nextUp" class="strip" hidden></div>
+  <div id="stuckBar" class="strip warn" hidden></div>
+  <div id="demoBanner" class="strip warn" hidden>
+    <span class="tag">Примеры</span>
+    <span class="txt">В журнале есть тестовые записи. Они не ваши, удалите их перед началом работы.</span>
+    <button class="push" id="clearDemo" type="button">Удалить примеры</button>
+  </div>
+
+  <section class="kpis" aria-label="Итоги месяца">
+    <div class="kpi hero">
+      <div class="k" id="kpiIncomeLabel">Ваш доход</div>
+      <div class="v mono" id="kpiIncome">0,00 BYN</div>
+      <div class="s" id="kpiIncomeSub">10% от маржи оплаченных сделок</div>
+    </div>
+    <div class="kpi"><div class="k">Выручка</div><div class="v mono" id="kpiRevenue">0,00 BYN</div><div class="s" id="kpiRevenueSub">&nbsp;</div></div>
+    <div class="kpi"><div class="k">Маржа</div><div class="v mono" id="kpiMargin">0,00 BYN</div><div class="s" id="kpiMarginSub">&nbsp;</div></div>
+    <div class="kpi"><div class="k">Оплачено сделок</div><div class="v mono" id="kpiCount">0</div><div class="s" id="kpiCountSub">&nbsp;</div></div>
+  </section>
+
+  <section class="card" id="earnCard" aria-label="Заработано и потенциал">
+    <div class="card-head"><h2>Заработано и потенциал</h2><span class="muted" style="font-size:13px">ваши 10% от маржи</span></div>
+    <div class="tablewrap" id="earnTable"></div>
+    <p class="earnnote">Заработано: сделки со статусом «Оплачено», по дате оплаты. Ожидается: сделки в работе (Закупка, Доставка), В итогах месяца они считаются в текущем месяце, даже если оформлены раньше. В строках «Сегодня» и «Эта неделя» они стоят по дате согласия клиента. Рекламации и отказы не учитываются.</p>
+  </section>
+
+  <section class="card goal" id="goalCard" aria-label="Цель месяца и сделки в работе">
+    <div class="card-head">
+      <h2>Цель месяца и сделки в работе</h2>
+      <button class="btn ghost" id="toggleSettings" type="button" aria-expanded="false" aria-controls="settingsBox">Цель и настройки</button>
+    </div>
+    <div id="goalBody"></div>
+    <form class="settings" id="settingsBox" autocomplete="off" hidden>
+      <div class="form">
+        <div class="field"><label for="setGoal">Цель на месяц, BYN</label><input id="setGoal" class="mono" type="number" min="0" step="1" inputmode="decimal" placeholder="например 3000"></div>
+        <div class="field"><label for="setMinMargin">Предупреждать, если маржа ниже, %</label><input id="setMinMargin" class="mono" type="number" min="0" max="100" step="0.5" inputmode="decimal"></div>
+        <div class="field"><label for="setFollow">Повторная продажа через, мес.</label><input id="setFollow" class="mono" type="number" min="0" max="36" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="setStaleBuy">Зависла на «Закупке» через, дн.</label><input id="setStaleBuy" class="mono" type="number" min="0" max="365" step="1" inputmode="numeric"></div>
+        <div class="field"><label for="setStaleShip">Зависла на «Доставке» через, дн.</label><input id="setStaleShip" class="mono" type="number" min="0" max="365" step="1" inputmode="numeric"></div>
+        <div class="btns"><button class="btn" type="submit">Сохранить</button><button class="btn ghost" id="closeSettings" type="button">Закрыть</button></div>
+        <p class="note">Повторная продажа: когда сделка станет «Оплачено», в задачах появится напоминание вернуться к клиенту. Ноль выключает напоминания.</p>
+        <p class="note">Зависшие сделки: если сделка стоит на этапе дольше указанного числа дней, она подсвечивается в таблице и попадает в предупреждение вверху. Ноль выключает проверку этапа.</p>
+      </div>
+    </form>
+  </section>
+
+  <div class="search">
+    <input id="q" type="search" placeholder="Поиск: телефон, клиент, номер сделки, товар" aria-label="Поиск по задачам, продажам и клиентам" autocomplete="off">
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Разделы">
+    <button role="tab" id="tab-tasks" aria-selected="true" aria-controls="panel-tasks" type="button">Задачи<span class="n" id="nTasks"></span></button>
+    <button role="tab" id="tab-sales" aria-selected="false" aria-controls="panel-sales" type="button">Продажи<span class="n" id="nSales"></span></button>
+    <button role="tab" id="tab-clients" aria-selected="false" aria-controls="panel-clients" type="button">Клиенты<span class="n" id="nClients"></span></button>
+    <button role="tab" id="tab-hours" aria-selected="false" aria-controls="panel-hours" type="button">Часы и оклад</button>
+    <button role="tab" id="tab-stats" aria-selected="false" aria-controls="panel-stats" type="button">Статистика</button>
+  </nav>
+
+  <!-- Задачи -->
+  <section id="panel-tasks" role="tabpanel" aria-labelledby="tab-tasks" style="display:flex;flex-direction:column;gap:16px">
+    <form class="card" id="taskForm" autocomplete="off">
+      <h2>Новая задача</h2>
+      <div class="form">
+        <div class="field"><label for="tDeal">Номер сделки</label><input id="tDeal" class="mono" required placeholder="48213"></div>
+        <div class="field"><label for="tPhone">Телефон</label><input id="tPhone" class="mono" inputmode="tel" required placeholder="+375 29 000 00 00"></div>
+        <div class="field wide"><label for="tAction">Что сделать</label><input id="tAction" required placeholder="Позвонить, уточнить по оплате"></div>
+        <div class="field"><label for="tDate">Дата</label><input id="tDate" type="date" required></div>
+        <div class="field"><label for="tTime">Время</label><input id="tTime" type="time" required value="10:00"></div>
+        <div class="form-actions"><button class="btn" type="submit">Добавить</button></div>
+        <div class="hint" id="tHint" hidden></div>
+      </div>
+    </form>
+
+    <div class="filters" id="taskFilters" role="group" aria-label="Фильтр задач">
+      <button class="chip" type="button" data-f="all" aria-pressed="true">Все открытые</button>
+      <button class="chip" type="button" data-f="overdue" aria-pressed="false">Просрочено</button>
+      <button class="chip" type="button" data-f="today" aria-pressed="false">Сегодня</button>
+      <button class="chip" type="button" data-f="tomorrow" aria-pressed="false">Завтра</button>
+      <label class="muted" for="fDay" style="font-size:13px;margin-left:4px">На дату</label>
+      <input id="fDay" type="date">
+    </div>
+    <div id="taskList" style="display:flex;flex-direction:column;gap:18px"></div>
+  </section>
+
+  <!-- Продажи -->
+  <section id="panel-sales" role="tabpanel" aria-labelledby="tab-sales" hidden style="flex-direction:column;gap:16px">
+    <form class="card" id="saleForm" autocomplete="off">
+      <h2>Новая продажа</h2>
+      <div class="form">
+        <div class="field"><label for="sDate">Дата согласия клиента</label><input id="sDate" type="date" required></div>
+        <div class="field"><label for="sPhone">Телефон</label><input id="sPhone" class="mono" inputmode="tel" placeholder="необязательно"></div>
+        <div class="field"><label for="sClient">Покупатель</label><input id="sClient" required placeholder="Иванов Сергей"></div>
+        <div class="field"><label for="sDeal">Номер сделки</label><input id="sDeal" class="mono" placeholder="необязательно"></div>
+        <div class="field"><label for="sUrl">Ссылка на заказ в CRM</label><input id="sUrl" class="mono" placeholder="пусто: ссылка по номеру сделки"></div>
+        <div class="field"><label for="sStatus">Статус</label><select id="sStatus"></select></div>
+        <div class="field"><label for="sExpense">Ваши расходы по сделке, BYN</label><input id="sExpense" class="mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="необязательно"></div>
+        <div class="hint" id="sHint" hidden></div>
+      </div>
+      <div class="items" id="saleItems"></div>
+      <div class="items-foot">
+        <button class="btn ghost" id="addItem" type="button">+ Добавить товар</button>
+        <button class="btn" type="submit">Записать продажу</button>
+      </div>
+      <div class="preview" id="salePreview" aria-live="polite" style="margin-top:12px">Введите закуп и цену продажи, и здесь появится ваш доход.</div>
+    </form>
+
+    <div class="stages" id="stages" role="group" aria-label="Статус сделок"></div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2 id="salesTitle">Сделки</h2>
+        <div class="btnrow">
+          <select class="sortsel" id="salesSort" aria-label="Сортировка сделок">
+            <option value="auto">Сортировка: по умолчанию</option>
+            <option value="date-desc">Дата: новые сверху</option>
+            <option value="date-asc">Дата: старые сверху</option>
+            <option value="sum-desc">Сумма: по убыванию</option>
+            <option value="sum-asc">Сумма: по возрастанию</option>
+            <option value="margin-desc">Маржа: по убыванию</option>
+            <option value="margin-asc">Маржа: по возрастанию</option>
+          </select>
+          <button class="btn ghost" id="exportMonth" type="button">CSV за месяц</button>
+          <button class="btn ghost" id="exportAll" type="button">CSV весь журнал</button>
+        </div>
+      </div>
+      <div class="tablewrap" id="salesTable"></div>
+    </div>
+  </section>
+
+  <!-- Клиенты -->
+  <section id="panel-clients" role="tabpanel" aria-labelledby="tab-clients" hidden style="flex-direction:column;gap:12px">
+    <div class="muted" id="clientsNote" style="font-size:13px"></div>
+    <div class="clients" id="clientList"></div>
+  </section>
+
+  <!-- Часы и оклад -->
+  <section id="panel-hours" role="tabpanel" aria-labelledby="tab-hours" hidden style="flex-direction:column;gap:16px">
+    <div class="card">
+      <div class="card-head"><h2 id="hoursTitle">Часы и оклад</h2><button class="btn ghost" id="payToggle" type="button" aria-expanded="false">Оклад и смена</button></div>
+      <form id="payForm" class="settings" style="margin:0 0 14px;padding-top:0;border-top:0" autocomplete="off" hidden>
+        <div class="form">
+          <div class="field"><label for="payOklad">Оклад за полную норму, BYN</label><input id="payOklad" class="mono" type="number" min="0" step="1" inputmode="decimal"></div>
+          <div class="field"><label for="payShift">Часов в смене (без обеда)</label><input id="payShift" class="mono" type="number" min="1" max="24" step="0.5" inputmode="decimal"></div>
+          <div class="btns"><button class="btn" type="submit">Сохранить</button></div>
+          <p class="note">График 2/2/3: два рабочих, два выходных, три рабочих, потом два выходных, два рабочих, три выходных, и так по кругу. Норма месяца считается по графику, оклад выплачивается пропорционально отработанным часам.</p>
+        </div>
+      </form>
+      <div class="paygrid" id="payGrid"></div>
+      <div class="cal" id="cal"></div>
+      <div class="advice" id="adviceBox" hidden></div>
+      <div class="hrow" id="hourEdit" hidden></div>
+      <p class="earnnote" id="payNote"></p>
+    </div>
+  </section>
+
+  <!-- Статистика -->
+  <section id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" hidden>
+    <div class="stats">
+      <div class="card full">
+        <div class="card-head"><h2 id="cmpTitle">Месяц к месяцу</h2><span class="muted" style="font-size:13px">оплачено по дате оплаты, сделки в работе ожидаются в текущем месяце</span></div>
+        <div class="tablewrap" id="cmpTable"></div>
+      </div>
+      <div class="card"><div class="card-head"><h2>Воронка</h2></div><div class="rank" id="rankFunnel"></div><p class="muted" id="claimNote" style="font-size:13px;margin-top:10px"></p></div>
+      <div class="card">
+        <div class="card-head"><h2>Доход по дням недели</h2><span class="muted" style="font-size:13px">вся история, по дате оплаты и согласия</span></div>
+        <div class="chart" id="chartWeek" role="img" aria-label="Столбчатая диаграмма дохода по дням недели"></div><div class="legendrow"><span class="lg"><i class="a"></i>оплачено</span><span class="lg"><i class="b"></i>ожидается</span></div>
+      </div>
+      <div class="card full">
+        <div class="card-head"><h2>Ваш доход по дням</h2><span class="muted" style="font-size:13px" id="daysNote"></span></div>
+        <div class="chart" id="chartDays" role="img" aria-label="Столбчатая диаграмма дохода по дням месяца"></div><div class="legendrow"><span class="lg"><i class="a"></i>оплачено</span><span class="lg"><i class="b"></i>ожидается</span></div>
+      </div>
+      <div class="card full">
+        <div class="card-head"><h2>Доход по месяцам</h2><span class="muted" style="font-size:13px">последние 6 месяцев</span></div>
+        <div class="chart" id="chartMonths" role="img" aria-label="Столбчатая диаграмма дохода по месяцам"></div><div class="legendrow"><span class="lg"><i class="a"></i>оплачено</span><span class="lg"><i class="b"></i>ожидается</span></div>
+      </div>
+      <div class="card full"><div class="card-head"><h2>Категории</h2><span class="muted" style="font-size:13px">ваши 10%, доля месяца и маржа в % от выручки</span></div><div class="rank" id="rankCats"></div></div>
+      <div class="card"><h2>Товары</h2><div class="rank" id="rankProducts"></div></div>
+      <div class="card"><h2>Покупатели</h2><div class="rank" id="rankClients"></div></div>
+    </div>
+  </section>
+</div>
+<div class="scrim" id="editScrim" hidden>
+  <form class="sheet" id="editForm" role="dialog" aria-modal="true" aria-labelledby="editTitle" autocomplete="off">
+    <div class="sheet-head">
+      <div>
+        <h2 id="editTitle">Изменить продажу</h2>
+        <p class="muted" id="editSub" style="font-size:13px"></p>
+      </div>
+      <button class="icon-btn" type="button" id="editClose">Закрыть</button>
+    </div>
+    <div class="form">
+      <div class="field"><label for="eDate">Дата согласия клиента</label><input id="eDate" type="date" required></div>
+      <div class="field" id="ePaidWrap" hidden><label for="ePaid">Дата оплаты</label><input id="ePaid" type="date"></div>
+      <div class="field"><label for="eClient">Покупатель</label><input id="eClient" required placeholder="Иванов Сергей"></div>
+      <div class="field"><label for="ePhone">Телефон</label><input id="ePhone" class="mono" inputmode="tel" placeholder="необязательно"></div>
+      <div class="field"><label for="eDeal">Номер сделки</label><input id="eDeal" class="mono" placeholder="необязательно"></div>
+      <div class="field"><label for="eUrl">Ссылка на заказ в CRM</label><input id="eUrl" class="mono" placeholder="пусто: ссылка по номеру сделки"></div>
+      <div class="field"><label for="eExpense">Ваши расходы по сделке, BYN</label><input id="eExpense" class="mono" type="number" min="0" step="0.01" inputmode="decimal" placeholder="необязательно"></div>
+      <div class="hint" id="eHint" hidden>Доход оплаченной сделки попадает в тот месяц, на который указана дата оплаты.</div>
+    </div>
+    <div class="items" id="editItems"></div>
+    <div class="items-foot"><button class="btn ghost" id="editAddItem" type="button">+ Добавить товар</button></div>
+    <div class="preview" id="editPreview" aria-live="polite"></div>
+    <div class="sheet-foot">
+      <button class="btn ghost" id="editCancel" type="button">Отмена</button>
+      <button class="btn" type="submit">Сохранить изменения</button>
+    </div>
+  </form>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(function () {
+  "use strict";
+  var RATE = 0.10, CUR = "BYN";
+  var MONTHS = ["январь","февраль","март","апрель","май","июнь","июль","август","сентябрь","октябрь","ноябрь","декабрь"];
+  var MON_SHORT = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+  var WD = ["вс","пн","вт","ср","чт","пт","сб"];
+  var nf2 = new Intl.NumberFormat("ru-RU", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var nf0 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 });
+  var nf1 = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
+
+  /* Deal stages. Income is counted only at "paid". */
+  var STAGES = [
+    { id: "purchasing", name: "Закупка", next: "delivery", cls: "s-new" },
+    { id: "delivery", name: "Доставка", next: "paid", cls: "s-ship" },
+    { id: "paid", name: "Оплачено", cls: "s-paid" },
+    { id: "claim", name: "Рекламация", cls: "s-claim" },
+    { id: "cancelled", name: "Отказ", cls: "s-off" }
+  ];
+  function stageOf(id) { for (var i = 0; i < STAGES.length; i++) { if (STAGES[i].id === id) return STAGES[i]; } return STAGES[0]; }
+  /* The old "Согласие" stage was dropped: such deals are treated as "Закупка". */
+  function st(s) { var k = s.status || "purchasing"; return k === "agreed" ? "purchasing" : k; }
+  function isOpen(s) { var k = st(s); return k === "purchasing" || k === "delivery"; }
+  /* Money comes in the month a deal becomes "paid". An unpaid deal is expected in the current month even if it was agreed earlier, so its date is never before today. */
+  /* Stuck deals: an open deal that has stayed on one stage longer than the limit set for that stage. */
+  function daysInStage(s) { var since = s.statusAt || s.createdAt || parseDay(s.date).getTime(); return Math.max(0, Math.floor((Date.now() - since) / 86400000)); }
+  function staleLimit(s) { var k = st(s), c = state.settings; return k === "purchasing" ? c.staleBuy : k === "delivery" ? c.staleShip : 0; }
+  function isStuck(s) { if (!isOpen(s)) return false; var lim = Number(staleLimit(s)) || 0; return lim > 0 && daysInStage(s) > lim; }
+  function expDay(s) { var t = ymd(new Date()), d = String(s.date); return d > t ? d : t; }
+
+  var $ = function (id) { return document.getElementById(id); };
+  var state = {
+    tasks: [], sales: [], gotTasks: false, gotSales: false,
+    sort: "auto", filter: "all", day: "", tab: "tasks", stage: "open", q: "", openClient: "",
+    settings: { goal: 0, minMargin: 10, followupMonths: 3, staleBuy: 5, staleShip: 10 },
+    db: null, downloads: null, cidx: { list: [], map: {} }
+  };
+  var now0 = new Date();
+  var view = { y: now0.getFullYear(), m: now0.getMonth() };
+
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  function ymd(d) { return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()); }
+  function r2(n) { return Math.round((n + Number.EPSILON) * 100) / 100; }
+  function money(n) { return nf2.format(r2(n)) + " " + CUR; }
+  function plural(n, a, b, c) { var m = Math.abs(n) % 100, d = m % 10; if (m > 10 && m < 20) return c; if (d > 1 && d < 5) return b; if (d === 1) return a; return c; }
+  function monthKey() { return view.y + "-" + pad(view.m + 1); }
+  function toast(t) { var el = $("toast"); el.textContent = t; el.classList.add("on"); clearTimeout(toast._t); toast._t = setTimeout(function () { el.classList.remove("on"); }, 2600); }
+  function ddmm(dstr) { var p = String(dstr || "").split("-"); return p.length === 3 ? p[2] + "." + p[1] : ""; }
+  function digitsOf(v) { return String(v == null ? "" : v).replace(/\D/g, ""); }
+  /* CRM link: accepts a full URL or just the CRM order id (digits). */
+  var CRM_BASE = "https://platipotomby.retailcrm.ru/orders/";
+  function normUrl(v) {
+    v = String(v || "").trim(); if (!v) return "";
+    if (/^\d{3,}$/.test(v)) return CRM_BASE + v + "/edit";
+    if (!/^https?:\/\//i.test(v)) v = "https://" + v;
+    return /^https?:\/\/[^\s]+\.[^\s]+/i.test(v) ? v : "";
+  }
+  /* Deal numbers look like 900404C; the CRM order page is orders/900404/edit, so the link is built from the digits. */
+  function autoUrl(deal) { var m = /^\s*(\d{3,})\s*[A-Za-zА-Яа-я]?\s*$/.exec(String(deal || "")); return m ? CRM_BASE + m[1] + "/edit" : ""; }
+  function saleUrl(s) { return s.url || autoUrl(s.deal); }
+  function urlForDeal(deal) {
+    if (!deal) return "";
+    for (var i = 0; i < state.sales.length; i++) { var x = state.sales[i]; if (x.deal === deal && x.url) return x.url; }
+    return autoUrl(deal);
+  }
+  function dealTag(deal, url, cls) {
+    var t = "№ " + esc(deal);
+    return url ? '<a class="' + cls + ' deal-link" href="' + esc(url) + '" target="_blank" rel="noopener noreferrer" title="Открыть заказ в CRM">' + t + " ↗</a>" : t;
+  }
+  function parseDay(dstr) { var p = String(dstr).split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+
+  /* ---------- calculations ---------- */
+  var CATS = [
+    { id: "big", name: "Крупная бытовая техника" },
+    { id: "kitchen", name: "Кухонная техника" },
+    { id: "home", name: "Электроника для дома" },
+    { id: "transport", name: "Электро- и бензотранспорт" },
+    { id: "furniture", name: "Мебель" },
+    { id: "climate", name: "Климатическая техника" },
+    { id: "care", name: "Уход за одеждой и домом" },
+    { id: "beauty", name: "Красота и здоровье" },
+    { id: "garden", name: "Сад и инструмент" },
+    { id: "acc", name: "Аксессуары и расходники" },
+    { id: "service", name: "Услуги и гарантия" },
+    { id: "other", name: "Другое" }
+  ];
+  function catName(id) { for (var i = 0; i < CATS.length; i++) { if (CATS[i].id === id) return CATS[i].name; } return "Другое"; }
+  function itemsOf(s) {
+    if (Array.isArray(s.items)) return s.items;
+    return [{ category: s.category || "other", name: s.product || "", qty: s.qty, buy: s.buy, sell: s.sell }];
+  }
+  function calcItem(it) {
+    var qty = Number(it.qty) || 0, buy = Number(it.buy) || 0, sell = Number(it.sell) || 0;
+    var revenue = sell * qty, cost = buy * qty, margin = revenue - cost;
+    return { revenue: revenue, cost: cost, margin: margin, income: margin * RATE };
+  }
+  function calc(s) {
+    var t = { revenue: 0, cost: 0, margin: 0, income: 0 };
+    itemsOf(s).forEach(function (it) { var c = calcItem(it); t.revenue += c.revenue; t.cost += c.cost; t.margin += c.margin; });
+    t.income = t.margin * RATE;
+    return t;
+  }
+  function expOf(s) { return Number(s.expense) || 0; }
+  function pctOf(c) { return c.revenue > 0 ? c.margin / c.revenue * 100 : null; }
+  function sumSales(list) {
+    var t = { revenue: 0, margin: 0, income: 0, expense: 0, count: list.length, items: 0 };
+    list.forEach(function (s) { var c = calc(s); t.revenue += c.revenue; t.margin += c.margin; t.income += c.income; t.expense += expOf(s); t.items += itemsOf(s).length; });
+    return t;
+  }
+  function paidKey(s) { return String(s.paidDate || s.date).slice(0, 7); }
+  function paidOfMonth(y, m) { var k = y + "-" + pad(m + 1); return state.sales.filter(function (s) { return st(s) === "paid" && paidKey(s) === k; }); }
+  function statusKey(s) { return s.statusAt ? ymd(new Date(s.statusAt)).slice(0, 7) : String(s.date).slice(0, 7); }
+  function lowMargin(c) { var p = pctOf(c); return p !== null && p < state.settings.minMargin; }
+
+  /* ---------- clients (built from sales and tasks by phone) ---------- */
+  function ckey(phone, name) {
+    var d = digitsOf(phone);
+    if (d.length >= 7) return "p" + d.slice(-9);
+    var n = String(name || "").trim().toLowerCase();
+    return n ? "n" + n : "";
+  }
+  function buildIndex() {
+    var map = {}, list = [];
+    function get(key) { if (!map[key]) { map[key] = { key: key, name: "", phone: "", sales: [], tasks: [], last: "" }; list.push(map[key]); } return map[key]; }
+    state.sales.slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : String(a.date) > String(b.date) ? 1 : (a.createdAt || 0) - (b.createdAt || 0); }).forEach(function (s) {
+      var key = ckey(s.phone, s.client); if (!key) return;
+      var c = get(key);
+      if (s.client) c.name = s.client;
+      if (s.phone) c.phone = s.phone;
+      c.sales.push(s);
+      if (String(s.date) > c.last) c.last = String(s.date);
+    });
+    state.tasks.forEach(function (t) {
+      var key = ckey(t.phone, ""); if (!key || key.charAt(0) !== "p") return;
+      var c = get(key); if (!c.phone) c.phone = t.phone; c.tasks.push(t);
+    });
+    list.forEach(function (c) {
+      var paid = c.sales.filter(function (s) { return st(s) === "paid"; });
+      c.paidCount = paid.length; c.income = sumSales(paid).income;
+      c.openCount = c.sales.filter(isOpen).length;
+      c.openTasks = c.tasks.filter(function (t) { return !t.done; });
+    });
+    list.sort(function (a, b) { return a.last < b.last ? 1 : a.last > b.last ? -1 : 0; });
+    state.cidx = { map: map, list: list };
+  }
+  function clientLabel(c) { return c.name || c.phone || "Без имени"; }
+  function clientByPhone(phone) { var k = ckey(phone, ""); if (!k || k.charAt(0) !== "p") return null; return state.cidx.map[k] || null; }
+
+  /* ---------- search ---------- */
+  function qMatch(parts) {
+    var q = state.q; if (!q) return true;
+    var hay = parts.join(" ").toLowerCase();
+    if (hay.indexOf(q) >= 0) return true;
+    var qd = digitsOf(q);
+    if (qd.length >= 3) { var hd = digitsOf(parts.join(" ")); if (hd.indexOf(qd) >= 0) return true; }
+    return false;
+  }
+  function taskMatch(t) { var c = clientByPhone(t.phone); return qMatch([t.action, t.deal, t.phone, c ? c.name : ""]); }
+  function saleMatch(s) { return qMatch([s.client, s.phone, s.deal].concat(itemsOf(s).map(function (i) { return i.name; }))); }
+  function clientMatch(c) { return qMatch([c.name, c.phone].concat(c.sales.map(function (s) { return s.deal; }))); }
+
+  /* ---------- header, KPI, goal ---------- */
+  function renderHeader() {
+    var d = new Date();
+    $("today").textContent = "Сегодня " + WD[d.getDay()] + ", " + d.getDate() + " " + MON_SHORT[d.getMonth()] + " " + d.getFullYear();
+    $("monthLabel").textContent = MONTHS[view.m] + " " + view.y;
+  }
+  function renderKpi() {
+    var cur = sumSales(paidOfMonth(view.y, view.m));
+    var pm = view.m === 0 ? 11 : view.m - 1, py = view.m === 0 ? view.y - 1 : view.y;
+    var prev = sumSales(paidOfMonth(py, pm));
+    var mpK = monthPay(view.y, view.m), mpP = monthPay(py, pm);
+    var total = cur.income + mpK.earned, prevTotal = prev.income + mpP.earned;
+    $("kpiIncomeLabel").textContent = "Ваш доход, " + MONTHS[view.m];
+    $("kpiIncome").textContent = money(total);
+    var sub = "Проценты с продаж " + esc(money(cur.income)) + " · оклад " + esc(money(mpK.earned));
+    if (prevTotal > 0) {
+      var p = Math.round((total - prevTotal) / prevTotal * 100);
+      sub += '<br><span class="delta">' + (p >= 0 ? "▲ +" : "▼ ") + p + "%</span> к " + MON_SHORT[pm];
+    }
+    if (cur.expense > 0) sub += "<br>Расходы −" + esc(money(cur.expense)) + ", чистыми " + esc(money(total - cur.expense));
+    var pendM = sumSales(state.sales.filter(function (s) { return isOpen(s) && expDay(s).slice(0, 7) === monthKey(); }));
+    var salLeft = Math.max(0, mpK.proj - mpK.earned);
+    sub += "<br>Ожидается ещё +" + esc(money(pendM.income + salLeft)) + " (проценты " + esc(money(pendM.income)) + ", оклад " + esc(money(salLeft)) + ") · потенциал " + esc(money(total + pendM.income + salLeft));
+    var fcK = forecast();
+    if (fcK && fcK.hasData) sub += "<br>Прогноз на конец месяца ≈ " + esc(money(fcK.fPot + mpK.proj)) + " (проценты " + esc(money(fcK.fPot)) + ", оклад " + esc(money(mpK.proj)) + ")";
+    $("kpiIncomeSub").innerHTML = sub;
+    $("kpiRevenue").textContent = money(cur.revenue);
+    $("kpiRevenueSub").textContent = cur.count ? "средний чек " + money(cur.revenue / cur.count) : " ";
+    $("kpiMargin").textContent = money(cur.margin);
+    $("kpiMarginSub").textContent = cur.revenue > 0 ? "наценка " + nf1.format(cur.margin / cur.revenue * 100) + "% от выручки" : " ";
+    $("kpiCount").textContent = String(cur.count);
+    var open = state.sales.filter(isOpen).length;
+    $("kpiCountSub").textContent = open ? "в работе ещё " + open : (cur.count ? cur.items + " " + plural(cur.items, "позиция", "позиции", "позиций") : " ");
+  }
+  function weekRange() {
+    var d = new Date(), k = (d.getDay() + 6) % 7;
+    return [ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - k)), ymd(new Date(d.getFullYear(), d.getMonth(), d.getDate() - k + 6))];
+  }
+  function earnRow(label, sub, pred, cur, pendPred) {
+    var paid = sumSales(state.sales.filter(function (s) { return st(s) === "paid" && pred(String(s.paidDate || s.date)); }));
+    var pend = sumSales(state.sales.filter(function (s) { return isOpen(s) && (pendPred ? pendPred(s) : pred(String(s.date))); }));
+    var dl = function (n) { return n + " " + plural(n, "сделка", "сделки", "сделок"); };
+    return "<tr" + (cur ? ' class="cur"' : "") + '><td class="per">' + esc(label) + (sub ? "<small>" + esc(sub) + "</small>" : "") + '</td>' +
+      '<td class="num"><b>' + nf2.format(r2(paid.income)) + "</b><small>" + dl(paid.count) + "</small></td>" +
+      '<td class="num pend">+' + nf2.format(r2(pend.income)) + "<small>" + dl(pend.count) + "</small></td>" +
+      '<td class="num"><b>' + nf2.format(r2(paid.income + pend.income)) + "</b></td></tr>";
+  }
+  function renderEarn() {
+    var now = new Date(), today = ymd(now), wk = weekRange(), mk = monthKey();
+    var mlabel = MONTHS[view.m].charAt(0).toUpperCase() + MONTHS[view.m].slice(1) + " " + view.y;
+    $("earnTable").innerHTML = '<table class="earn"><thead><tr><th>Период</th><th class="num">Заработано</th><th class="num pend">Ожидается</th><th class="num">Потенциал всего</th></tr></thead><tbody>' +
+      earnRow("Сегодня", WD[now.getDay()] + ", " + now.getDate() + " " + MON_SHORT[now.getMonth()], function (d) { return d === today; }, false) +
+      earnRow("Эта неделя", ddmm(wk[0]) + " – " + ddmm(wk[1]), function (d) { return d >= wk[0] && d <= wk[1]; }, false) +
+      earnRow(mlabel, "месяц в шапке", function (d) { return d.slice(0, 7) === mk; }, true, function (s) { return expDay(s).slice(0, 7) === mk; }) +
+      earnRow("Всё время", "все сделки", function () { return true; }, false) + "</tbody></table>";
+  }
+  /* Month-end forecast at the current pace: money already secured (paid plus open deals expected this month) and new deals at this month's pace for the days left. */
+  function forecast() {
+    var now = new Date();
+    if (view.y !== now.getFullYear() || view.m !== now.getMonth()) return null;
+    var day = now.getDate(), dim = new Date(view.y, view.m + 1, 0).getDate(), mk = monthKey();
+    var sc = shiftCounts(), left = sc.left, done = sc.done, den = Math.max(done, 3);
+    var cur = sumSales(paidOfMonth(view.y, view.m));
+    var pend = sumSales(state.sales.filter(function (s) { return isOpen(s) && expDay(s).slice(0, 7) === mk; }));
+    var flow = sumSales(state.sales.filter(function (s) { return (st(s) === "paid" || isOpen(s)) && String(s.date).slice(0, 7) === mk; }));
+    var pot = cur.income + pend.income, pace = flow.income / den;
+    return { day: day, dim: dim, left: left, done: done, paid: cur.income, pend: pend.income, pot: pot, pace: pace, add: pace * left,
+      fPot: pot + pace * left, fPaid: cur.income / den * (done + left), hasData: cur.count > 0 || pend.count > 0 || flow.count > 0 };
+  }
+  function verdictHtml(f, goal) {
+    if (!(goal > 0)) return "";
+    var pc = Math.round(f / goal * 100);
+    return f >= goal ? '<span class="ok">' + pc + "% цели, запас " + esc(money(f - goal)) + "</span>" : '<span class="lack">' + pc + "% цели, не хватает " + esc(money(goal - f)) + "</span>";
+  }
+  function forecastHtml(fc, goal) {
+    if (!fc.hasData) return '<p class="muted" style="font-size:13px;margin-top:12px">Прогноз появится, когда в этом месяце будут сделки.</p>';
+    var main = '<div class="fc main"><div class="k">Прогноз на конец месяца</div><div class="v mono">' + esc(money(fc.fPot)) + "</div>";
+    var v1 = verdictHtml(fc.fPot, goal);
+    if (v1) main += '<div class="s">' + v1 + "</div>";
+    if (goal > 0 && fc.fPot < goal && fc.left > 0) main += '<div class="s">Чтобы выйти на цель, нужно оформлять по ' + esc(money(Math.max(0, goal - fc.pot) / fc.left)) + " за смену, сейчас " + esc(money(fc.pace)) + ".</div>";
+    main += '<div class="d">Уже есть ' + esc(money(fc.pot)) + " (оплачено " + esc(money(fc.paid)) + ", в работе " + esc(money(fc.pend)) + ") и новые сделки по " + esc(money(fc.pace)) + " за смену" + (fc.left ? ", ещё " + fc.left + " " + plural(fc.left, "смена", "смены", "смен") + " по графику: +" + esc(money(fc.add)) : ", но смен до конца месяца больше нет") + ".</div></div>";
+    var sec = '<div class="fc"><div class="k">Если оплаты пойдут тем же темпом</div><div class="v mono">' + esc(money(fc.fPaid)) + "</div>";
+    var v2 = verdictHtml(fc.fPaid, goal);
+    if (v2) sec += '<div class="s">' + v2 + "</div>";
+    sec += '<div class="d">Оплачено ' + esc(money(fc.paid)) + " за " + fc.done + " " + plural(fc.done, "смену", "смены", "смен") + ", в среднем " + esc(money(fc.paid / Math.max(fc.done, 1))) + " за смену.</div></div>";
+    return '<div class="fcgrid">' + main + sec + "</div>";
+  }
+  function renderGoal() {
+    var set = state.settings, goal = set.goal, now = new Date();
+    var cur = sumSales(paidOfMonth(view.y, view.m));
+    var pipe = sumSales(state.sales.filter(isOpen));
+    var isCur = view.y === now.getFullYear() && view.m === now.getMonth();
+    var fc = forecast();
+    var h = "", meta = [], legend = [], pct = goal > 0 ? cur.income / goal * 100 : 0;
+    if (goal > 0) {
+      var pp = fc ? fc.pend / goal * 100 : 0;
+      var w1 = Math.max(0, Math.min(100, pct)), w2 = Math.max(0, Math.min(100 - w1, pp));
+      h += '<div class="gtop"><span><b class="mono">' + esc(money(cur.income)) + '</b> из <span class="mono">' + esc(money(goal)) + '</span></span><span class="mono gpct">' + nf0.format(Math.round(pct)) + "%</span></div>";
+      h += '<div class="gwrap"><div class="gbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + Math.round(Math.min(pct, 100)) + '" aria-label="Прогресс к цели месяца"><span class="f1" style="width:' + w1 + '%"></span><span class="f2" style="width:' + w2 + '%"></span></div>';
+      var showMark = !!(fc && fc.hasData && fc.fPot > 0 && fc.fPot < goal);
+      if (showMark) h += '<span class="gmark" style="left:' + (fc.fPot / goal * 100) + '%" title="Прогноз на конец месяца"></span>';
+      h += "</div>";
+      if (fc && fc.pend > 0) legend.push("Тёмная часть шкалы оплачена, светлая ожидается по сделкам в работе.");
+      if (showMark) legend.push("Чёрная отметка: прогноз на конец месяца.");
+      if (isCur) {
+        var rem = goal - cur.income, sc0 = shiftCounts(), leftSh = sc0.left + (hoursOn(ymd(new Date())) > 0 ? 1 : 0);
+        if (rem <= 0) meta.push("Цель выполнена"); else meta.push("До цели " + money(rem) + (leftSh > 0 ? ", это " + money(rem / leftSh) + " за смену, осталось " + leftSh + " " + plural(leftSh, "смена", "смены", "смен") : ", смен до конца месяца не осталось"));
+      }
+    } else {
+      h += '<p class="muted" style="font-size:14px;margin-bottom:6px">Цель не задана. Задайте её в настройках, и здесь появится, на сколько процентов вы к ней идёте.</p>';
+    }
+    if (fc) {
+      h += forecastHtml(fc, goal);
+      if (fc.hasData && fc.done < 3) legend.push("Отработано мало смен: прогноз пока неточный, он уточнится по мере сделок. Прогноз считается только по сменам из графика.");
+    }
+    if (pipe.count) {
+      meta.push("В работе " + pipe.count + " " + plural(pipe.count, "сделка", "сделки", "сделок") + ": после оплаты +" + money(pipe.income));
+      if (goal > 0 && isCur) meta.push("Если все закроются: " + money(cur.income + pipe.income) + " (" + nf0.format(Math.round((cur.income + pipe.income) / goal * 100)) + "% цели)");
+    } else meta.push("Сделок в работе нет");
+    h += '<div class="gmeta">' + meta.map(function (t) { return "<span>" + esc(t) + "</span>"; }).join("") + "</div>";
+    if (legend.length) h += '<div class="legend">' + esc(legend.join(" ")) + "</div>";
+    $("goalBody").innerHTML = h;
+  }
+
+  /* ---------- tasks ---------- */
+  function dueDate(t) { var p = String(t.due).split("T"); var d = p[0].split("-"), tm = (p[1] || "00:00").split(":"); return new Date(+d[0], +d[1] - 1, +d[2], +tm[0], +tm[1]); }
+  function dueStr(d) { return ymd(d) + "T" + pad(d.getHours()) + ":" + pad(d.getMinutes()); }
+  function dayLabel(dstr) {
+    var t = ymd(new Date()), tm = new Date(); tm.setDate(tm.getDate() + 1);
+    if (dstr === t) return "сегодня";
+    if (dstr === ymd(tm)) return "завтра";
+    var d = parseDay(dstr);
+    return WD[d.getDay()] + ", " + d.getDate() + " " + MON_SHORT[d.getMonth()];
+  }
+  function relText(ms) {
+    var m = Math.round(Math.abs(ms) / 60000);
+    if (m < 1) return "сейчас";
+    if (m < 60) return m + " мин";
+    var h = Math.floor(m / 60), mm = m % 60;
+    if (h < 24) return h + " ч" + (mm ? " " + mm + " мин" : "");
+    var d = Math.floor(h / 24); return d + " " + plural(d, "день", "дня", "дней");
+  }
+  function taskHtml(t, now) {
+    var due = dueDate(t), over = !t.done && due < now;
+    var dstr = String(t.due).slice(0, 10), time = String(t.due).slice(11, 16);
+    var cl = clientByPhone(t.phone);
+    var meta = "";
+    if (t.deal) meta += '<span class="deal">' + dealTag(t.deal, urlForDeal(t.deal), "") + "</span>";
+    if (cl && cl.name) meta += "<span>" + esc(cl.name) + "</span>";
+    if (t.phone) meta += '<span><span class="phone">' + esc(t.phone) + '</span> <button class="copy" type="button" data-copy="' + esc(t.phone) + '">копировать</button></span>';
+    if (t.auto) meta += '<span class="auto">повторная продажа</span>';
+    var ops = t.done
+      ? '<button class="icon-btn" type="button" data-act="reopen">Вернуть</button>'
+      : '<button class="icon-btn done" type="button" data-act="done">Готово</button>' +
+        '<button class="icon-btn sm" type="button" data-act="snz1" title="Отложить на час">+1 ч</button>' +
+        '<button class="icon-btn sm" type="button" data-act="snzT" title="Отложить на завтра">Завтра</button>' +
+        '<button class="icon-btn sm" type="button" data-act="snz3" title="Отложить на 3 дня">+3 дня</button>';
+    return '<article class="task' + (over ? " overdue" : "") + (t.done ? " is-done" : "") + '" data-id="' + esc(t.id) + '">' +
+      '<div class="when">' + esc(time) + "<small>" + esc(dayLabel(dstr)) + (over ? " · −" + esc(relText(now - due)) : "") + "</small></div>" +
+      '<div class="body"><div class="act">' + esc(t.action) + '</div><div class="meta">' + meta + "</div></div>" +
+      '<div class="ops">' + ops + '<button class="icon-btn sm" type="button" data-act="del" aria-label="Удалить задачу">Удалить</button></div></article>';
+  }
+  function renderTasks() {
+    var box = $("taskList"), now = new Date();
+    var byDue = function (a, b) { return String(a.due) < String(b.due) ? -1 : 1; };
+    var openAll = state.tasks.filter(function (t) { return !t.done; });
+    $("nTasks").textContent = openAll.length ? String(openAll.length) : "";
+    if (!state.gotTasks) { box.innerHTML = '<div class="empty">Загружаю задачи…</div>'; return; }
+    if (!state.tasks.length) { box.innerHTML = '<div class="empty"><b>Задач пока нет</b>Добавьте первую: номер сделки, телефон, что сделать и когда.</div>'; return; }
+    var open = openAll.filter(taskMatch).sort(byDue);
+    var done = state.tasks.filter(function (t) { return t.done && taskMatch(t); }).sort(function (a, b) { return byDue(b, a); });
+
+    var today = ymd(now), tm = new Date(); tm.setDate(tm.getDate() + 1); var tomorrow = ymd(tm);
+    var groups = [];
+    var f = state.q ? "search" : (state.day ? "day" : state.filter);
+    if (f === "search") {
+      groups.push({ title: "Найдено", items: open, cls: "" });
+    } else if (f === "day") {
+      groups.push({ title: "На " + dayLabel(state.day), items: open.filter(function (t) { return String(t.due).slice(0, 10) === state.day; }), cls: "" });
+    } else if (f === "overdue") {
+      groups.push({ title: "Просрочено", items: open.filter(function (t) { return dueDate(t) < now; }), cls: "overdue" });
+    } else if (f === "today") {
+      groups.push({ title: "Сегодня", items: open.filter(function (t) { return String(t.due).slice(0, 10) === today; }), cls: "" });
+    } else if (f === "tomorrow") {
+      groups.push({ title: "Завтра", items: open.filter(function (t) { return String(t.due).slice(0, 10) === tomorrow; }), cls: "" });
+    } else {
+      groups.push({ title: "Просрочено", items: open.filter(function (t) { return dueDate(t) < now; }), cls: "overdue" });
+      groups.push({ title: "Сегодня", items: open.filter(function (t) { var d = String(t.due).slice(0, 10); return d === today && dueDate(t) >= now; }), cls: "" });
+      groups.push({ title: "Завтра", items: open.filter(function (t) { return String(t.due).slice(0, 10) === tomorrow; }), cls: "" });
+      groups.push({ title: "Позже", items: open.filter(function (t) { return String(t.due).slice(0, 10) > tomorrow; }), cls: "" });
+    }
+    var html = "", any = false;
+    groups.forEach(function (g) {
+      if (!g.items.length) return;
+      any = true;
+      html += '<div class="group ' + g.cls + '"><h3>' + esc(g.title) + '<span class="mono">' + g.items.length + "</span></h3>" + g.items.map(function (t) { return taskHtml(t, now); }).join("") + "</div>";
+    });
+    if (!any) html = '<div class="empty"><b>' + (state.q ? "Среди открытых задач ничего не найдено" : "На это время задач нет") + "</b>" + (state.q ? "Проверьте запрос или откройте вкладки «Продажи» и «Клиенты»." : "Выберите другой фильтр или добавьте задачу.") + "</div>";
+    if (done.length && (f === "all" || f === "search")) {
+      html += '<details class="finished"><summary>Выполнено: ' + done.length + '</summary><div class="group" style="margin-top:8px">' + done.slice(0, 15).map(function (t) { return taskHtml(t, now); }).join("") + "</div></details>";
+    }
+    box.innerHTML = html;
+  }
+  function renderNextUp() {
+    var el = $("nextUp"), now = new Date();
+    var open = state.tasks.filter(function (t) { return !t.done; }).sort(function (a, b) { return String(a.due) < String(b.due) ? -1 : 1; });
+    if (!state.gotTasks || !open.length) { el.hidden = true; return; }
+    var over = open.filter(function (t) { return dueDate(t) < now; });
+    el.hidden = false;
+    var dealTxt = function (t) { return (t.deal ? "№ " + t.deal + " · " : ""); };
+    if (over.length) {
+      var t0 = over[0];
+      el.className = "strip warn";
+      el.innerHTML = '<span class="tag">Просрочено: ' + over.length + '</span><span class="txt">' + esc(dealTxt(t0)) + esc(t0.action) + " · было в " + esc(String(t0.due).slice(11, 16)) + "</span>";
+    } else {
+      var n0 = open[0], ms = dueDate(n0) - now;
+      el.className = "strip";
+      el.innerHTML = '<span class="tag" style="color:var(--accent)">Дальше · через ' + esc(relText(ms)) + '</span><span class="txt"><span class="mono">' + esc(String(n0.due).slice(11, 16)) + "</span> · " + esc(dealTxt(n0)) + esc(n0.action) + "</span>";
+    }
+  }
+
+  function renderStuck() {
+    var el = $("stuckBar");
+    var list = state.gotSales ? state.sales.filter(isStuck) : [];
+    if (!list.length) { el.hidden = true; if (state.stage === "stuck") { state.stage = "open"; } return; }
+    list.sort(function (a, b) { return (daysInStage(b) - Number(staleLimit(b))) - (daysInStage(a) - Number(staleLimit(a))); });
+    var w = list[0], what = (w.client || "без имени") + (w.deal ? " (№ " + w.deal + ")" : "");
+    el.hidden = false;
+    el.innerHTML = '<span class="tag">Зависли: ' + list.length + '</span><span class="txt">' + esc(what) + " · " + esc(stageOf(st(w)).name) + " уже " + daysInStage(w) + " " + plural(daysInStage(w), "день", "дня", "дней") + (list.length > 1 ? ", и ещё " + (list.length - 1) : "") + '</span><button class="push" type="button" id="showStuck">Показать</button>';
+  }
+  $("stuckBar").addEventListener("click", function (e) {
+    if (!e.target.closest("#showStuck")) return;
+    state.stage = "stuck"; state.q = ""; $("q").value = "";
+    setTab("sales"); renderSales();
+    $("salesTitle").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+
+  /* ---------- sales: stage tiles and table ---------- */
+  function stageSales(id) {
+    var k = monthKey();
+    if (id === "stuck") return state.sales.filter(isStuck);
+    if (id === "open") return state.sales.filter(isOpen);
+    if (id === "purchasing" || id === "delivery") return state.sales.filter(function (s) { return st(s) === id; });
+    if (id === "paid") return paidOfMonth(view.y, view.m);
+    if (id === "claim" || id === "cancelled") return state.sales.filter(function (s) { return st(s) === id && statusKey(s) === k; });
+    return state.sales.filter(function (s) { return String(s.date).slice(0, 7) === k; });
+  }
+  function renderStages() {
+    var tiles = [{ id: "open", name: "В работе", cls: "", amt: "ожидается" }]
+      .concat(STAGES.map(function (g) { return { id: g.id, name: g.name, cls: g.cls }; }))
+      .concat([{ id: "all", name: "Все за месяц", cls: "" }]);
+    if (state.sales.some(isStuck)) tiles.splice(1, 0, { id: "stuck", name: "Зависли", cls: "s-buy" });
+    $("stages").innerHTML = tiles.map(function (t) {
+      var list = stageSales(t.id), sum = sumSales(list), amt = " ";
+      if (t.id === "stuck") amt = list.length ? "+" + nf2.format(r2(sum.income)) : " ";
+      else if (t.id === "open" || t.id === "purchasing" || t.id === "delivery") amt = list.length ? "+" + nf2.format(r2(sum.income)) : " ";
+      else if (t.id === "paid") amt = list.length ? nf2.format(r2(sum.income)) : " ";
+      else if (t.id === "claim") amt = list.length ? "не оплачено" : " ";
+      return '<button class="stage ' + t.cls + '" type="button" data-stage="' + t.id + '" aria-pressed="' + String(state.stage === t.id && !state.q) + '">' +
+        '<span class="l">' + (t.cls ? '<span class="dot"></span>' : "") + esc(t.name) + '</span><span class="n">' + list.length + '</span><span class="amt">' + esc(amt) + "</span></button>";
+    }).join("");
+  }
+  function stageTitle() {
+    if (state.q) return "Найдено по запросу";
+    var m = MONTHS[view.m] + " " + view.y;
+    switch (state.stage) {
+      case "stuck": return "Зависшие сделки, все месяцы";
+      case "open": return "Сделки в работе, все месяцы";
+      case "purchasing": return "Закупка, все месяцы";
+      case "delivery": return "Доставка, все месяцы";
+      case "paid": return "Оплачено, " + m;
+      case "claim": return "Рекламации, " + m;
+      case "cancelled": return "Отказы, " + m;
+      default: return "Все сделки, " + m;
+    }
+  }
+  function statusCell(s) {
+    var k = st(s), sg = stageOf(k);
+    var sel = '<select class="stsel ' + sg.cls + '" data-st="' + esc(s.id) + '" aria-label="Статус сделки">' + STAGES.map(function (g) {
+      return '<option value="' + g.id + '"' + (g.id === k ? " selected" : "") + ">" + g.name + "</option>";
+    }).join("") + "</select>";
+    var sub = "";
+    if (isOpen(s)) {
+      var d = daysInStage(s), lim = Number(staleLimit(s)) || 0;
+      sub = '<span class="sub' + (isStuck(s) ? " low" : "") + '">' + (d < 1 ? "в статусе сегодня" : "в статусе " + d + " дн.") + (isStuck(s) ? " · завис, норма до " + lim : "") + "</span>";
+    } else if (k === "paid") sub = '<span class="sub">оплата ' + esc(ddmm(s.paidDate || s.date)) + "</span>";
+    var next = sg.next ? '<button class="icon-btn sm next" type="button" data-act="next" data-to="' + sg.next + '">→ ' + esc(stageOf(sg.next).name) + "</button>" : "";
+    return sel + sub + next;
+  }
+  function renderSales() {
+    var box = $("salesTable");
+    $("salesTitle").textContent = stageTitle();
+    var openN = state.sales.filter(isOpen).length;
+    $("nSales").textContent = openN ? String(openN) : "";
+    if (!state.gotSales) { box.innerHTML = '<div class="empty">Загружаю продажи…</div>'; return; }
+    renderStages();
+    var list = (state.q ? state.sales.filter(saleMatch) : stageSales(state.stage)).slice();
+    var asc = !state.q && (state.stage === "open" || state.stage === "stuck" || state.stage === "purchasing" || state.stage === "delivery");
+    var sk = state.sort || "auto", sp = sk.split("-"), sdir = sp[1] === "asc" ? 1 : -1;
+    if (sk !== "auto" && sp[0] !== "date") {
+      var sv = function (x) { var c = calc(x); return sp[0] === "sum" ? c.revenue : c.margin; };
+      list.sort(function (a, b) { var d = sv(a) - sv(b); if (d) return d * sdir; return a.date !== b.date ? (a.date < b.date ? 1 : -1) : 0; });
+    } else {
+      if (sk !== "auto") asc = sdir === 1;
+      list.sort(function (a, b) {
+        if (a.date !== b.date) return asc ? (a.date < b.date ? -1 : 1) : (a.date < b.date ? 1 : -1);
+        return asc ? (a.createdAt || 0) - (b.createdAt || 0) : (b.createdAt || 0) - (a.createdAt || 0);
+      });
+    }
+    if (!list.length) {
+      var msg = state.q ? "Ничего не найдено" : (state.sales.length ? "В этом разделе сделок нет" : "Продаж пока нет");
+      box.innerHTML = '<div class="empty"><b>' + msg + "</b>" + (state.q ? "Проверьте запрос: можно искать по телефону, клиенту, номеру сделки и товару." : "Запишите продажу выше: клиент, товар, закуп и цена продажи. Доход посчитается после оплаты.") + "</div>";
+      return;
+    }
+    var rows = list.map(function (s) {
+      var c = calc(s), k = st(s), paid = k === "paid", pc = pctOf(c), low = lowMargin(c);
+      var lines = itemsOf(s).map(function (it) {
+        return '<span class="line"><span class="cat">' + esc(catName(it.category)) + "</span>" + esc(it.name) + ' <span class="mono muted">× ' + esc(it.qty) + "</span></span>";
+      }).join("");
+      var sub = (s.deal || s.url ? '<span class="sub">' + (saleUrl(s) ? dealTag(s.deal || "CRM", saleUrl(s), "") : "№ " + esc(s.deal)) + "</span>" : "") + (s.phone ? '<span class="sub">' + esc(s.phone) + "</span>" : "");
+      var incTxt = nf2.format(r2(c.income));
+      var inc = paid ? "<b>" + incTxt + "</b>" : '<span class="pend" title="Будет засчитан после оплаты">' + incTxt + "</span>";
+      var exp = expOf(s) > 0 ? '<span class="sub">расходы −' + nf2.format(r2(expOf(s))) + "</span>" : "";
+      return '<tr data-id="' + esc(s.id) + '"' + (isStuck(s) ? ' class="stuck"' : "") + '><td class="mono" style="white-space:nowrap">' + esc(ddmm(s.date)) + "</td>" +
+        "<td>" + esc(s.client) + sub + "</td>" +
+        '<td class="itemcell">' + lines + "</td>" +
+        '<td class="num">' + nf2.format(r2(c.revenue)) + "</td>" +
+        '<td class="num' + (c.margin < 0 ? " neg" : "") + '">' + nf2.format(r2(c.margin)) + (pc !== null ? '<span class="sub' + (low ? " low" : "") + '"' + (low ? ' title="Маржа ниже порога ' + nf1.format(state.settings.minMargin) + '%"' : "") + ">" + nf1.format(pc) + "%" + (low ? " низкая" : "") + "</span>" : "") + "</td>" +
+        '<td class="num' + (c.income < 0 ? " neg" : "") + '">' + inc + exp + "</td>" +
+        '<td class="stcell">' + statusCell(s) + "</td>" +
+        '<td class="actcell"><button class="icon-btn sm" type="button" data-edit="1">Изменить</button><button class="icon-btn sm" type="button" data-act="taskfor">Задача</button><button class="icon-btn sm" type="button" data-act="delsale" aria-label="Удалить продажу">Удалить</button></td></tr>';
+    }).join("");
+    var t = sumSales(list);
+    box.innerHTML = '<table class="sales"><thead><tr><th>Дата</th><th>Покупатель</th><th>Товары</th><th class="num">Выручка</th><th class="num">Маржа</th><th class="num">Ваш доход</th><th>Статус</th><th></th></tr></thead><tbody>' + rows +
+      '</tbody><tfoot><tr><td colspan="3">Итого по списку</td><td class="num">' + nf2.format(r2(t.revenue)) + '</td><td class="num">' + nf2.format(r2(t.margin)) + '</td><td class="num">' + nf2.format(r2(t.income)) + "</td><td colspan=\"2\"></td></tr></tfoot></table>" +
+      '<p class="muted" style="font-size:12px;margin-top:8px">Серый доход ещё не засчитан: он попадёт в итоги месяца, когда статус станет «Оплачено». Кнопка «Изменить» открывает продажу для правки: дата, товары, цены, расходы.</p>';
+  }
+
+  /* ---------- clients ---------- */
+  function renderClients() {
+    var box = $("clientList");
+    var all = state.cidx.list;
+    $("nClients").textContent = all.length ? String(all.length) : "";
+    if (!state.gotSales) { box.innerHTML = '<div class="empty">Загружаю клиентов…</div>'; $("clientsNote").textContent = ""; return; }
+    var list = all.filter(clientMatch);
+    $("clientsNote").textContent = all.length ? (state.q ? "Найдено: " : "Клиентов: ") + list.length + (state.q ? " из " + all.length : "") + ". Клиент определяется по номеру телефона." : "";
+    if (!list.length) { box.innerHTML = '<div class="empty"><b>' + (all.length ? "Ничего не найдено" : "Клиентов пока нет") + "</b>" + (all.length ? "Проверьте запрос." : "Они появятся здесь, когда вы запишете первую продажу.") + "</div>"; return; }
+    box.innerHTML = list.slice(0, 120).map(function (c) {
+      var open = state.openClient === c.key;
+      var meta = "<span>" + c.sales.length + " " + plural(c.sales.length, "сделка", "сделки", "сделок") + "</span>";
+      if (c.paidCount) meta += "<span>оплачено " + c.paidCount + "</span>";
+      if (c.openCount) meta += "<span>в работе " + c.openCount + "</span>";
+      if (c.openTasks.length) meta += "<span>задач " + c.openTasks.length + "</span>";
+      if (c.paidCount > 1) meta += '<span class="delta-up">повторные покупки</span>';
+      if (c.last) meta += '<span class="muted">последняя ' + esc(ddmm(c.last)) + "." + esc(String(c.last).slice(0, 4)) + "</span>";
+      var head = '<button class="client-head" type="button" data-act="toggleclient" aria-expanded="' + open + '"><span><span class="nm">' + esc(clientLabel(c)) + "</span>" + (c.name && c.phone ? '<br><span class="ph">' + esc(c.phone) + "</span>" : "") + '</span><span class="inc">' + nf2.format(r2(c.income)) + "<small>ваш доход</small></span>" + '<span class="meta">' + meta + "</span></button>";
+      var body = "";
+      if (open) {
+        var sl = c.sales.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; }).map(function (s) {
+          var sg = stageOf(st(s)), cc = calc(s);
+          return '<div class="cl-line"><span class="mono">' + esc(ddmm(s.date)) + '</span><span class="it">' + esc(itemsOf(s).map(function (i) { return i.name; }).join(", ")) + (s.deal ? "<small>" + (saleUrl(s) ? dealTag(s.deal, saleUrl(s), "") : "№ " + esc(s.deal)) + "</small>" : "") + '</span><span class="pill ' + sg.cls + '">' + esc(sg.name) + '</span><span class="mono amt">' + nf2.format(r2(cc.income)) + "</span></div>";
+        }).join("") || '<p class="muted" style="font-size:13px">Продаж нет, только задачи.</p>';
+        var now = new Date();
+        var tl = c.openTasks.slice().sort(function (a, b) { return String(a.due) < String(b.due) ? -1 : 1; }).map(function (t) {
+          return '<div class="cl-line"><span class="mono">' + esc(String(t.due).slice(11, 16)) + '</span><span class="it">' + esc(t.action) + "<small>" + esc(dayLabel(String(t.due).slice(0, 10))) + (dueDate(t) < now ? " · просрочено" : "") + '</small></span><span></span><span></span></div>';
+        }).join("");
+        var lastOpen = c.sales.filter(isOpen).slice(-1)[0] || c.sales.slice(-1)[0];
+        body = '<div class="client-body"><div><h3>Сделки</h3>' + sl + "</div>" + (tl ? "<div><h3>Открытые задачи</h3>" + tl + "</div>" : "") +
+          '<div class="btnrow"><button class="btn ghost" type="button" data-act="salefor">Новая продажа</button><button class="btn ghost" type="button" data-act="taskforclient" data-deal="' + esc(lastOpen && lastOpen.deal ? lastOpen.deal : "") + '">Новая задача</button>' +
+          (c.phone ? '<button class="btn ghost" type="button" data-copy="' + esc(c.phone) + '">Копировать телефон</button>' : "") + "</div></div>";
+      }
+      return '<div class="client" data-ck="' + esc(c.key) + '">' + head + body + "</div>";
+    }).join("") + (list.length > 120 ? '<div class="muted" style="font-size:12px">Показаны первые 120. Уточните поиск.</div>' : "");
+  }
+
+  /* ---------- charts ---------- */
+  function ensureTip(host) { var t = host.querySelector(".tip"); if (!t) { t = document.createElement("div"); t.className = "tip"; host.appendChild(t); } return t; }
+  function niceStep(v) { if (v <= 0) return 1; var e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; var n = f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10; return n * e; }
+  function seg(x, yb, yt, w, r) {
+    if (yb - yt < 0.5) return "";
+    r = Math.min(r, w / 2, yb - yt);
+    if (r > 0) return "M" + x + " " + yb + "V" + (yt + r) + "a" + r + " " + r + " 0 0 1 " + r + " -" + r + "h" + (w - 2 * r) + "a" + r + " " + r + " 0 0 1 " + r + " " + r + "V" + yb + "Z";
+    return "M" + x + " " + yb + "V" + yt + "h" + w + "V" + yb + "Z";
+  }
+  /* items: value = paid income (solid), extra = expected income of open deals (light, stacked on top) */
+  function barChart(host, items, opt) {
+    var W = Math.max(280, host.clientWidth || 600), H = 230, L = 46, R = 8, T = 18, B = 26;
+    var tot = function (i) { return i.value + (i.extra || 0); };
+    var max = 0; items.forEach(function (i) { if (tot(i) > max) max = tot(i); });
+    var step = niceStep((max || 4) / 4), top = step * 4;
+    var iw = W - L - R, ih = H - T - B, band = iw / items.length, bw = Math.min(band - 3, opt.maxBar || 22);
+    var y = function (v) { return T + ih - (Math.max(v, 0) / top) * ih; };
+    var s = '<svg width="' + W + '" height="' + H + '" viewBox="0 0 ' + W + " " + H + '">';
+    for (var k = 0; k <= 4; k++) {
+      var v = step * k, yy = y(v);
+      s += '<line class="' + (k === 0 ? "base" : "grid") + '" x1="' + L + '" x2="' + (W - R) + '" y1="' + yy + '" y2="' + yy + '"/>';
+      s += '<text class="tick" x="' + (L - 8) + '" y="' + (yy + 4) + '" text-anchor="end">' + (step % 1 ? nf1.format(v) : nf0.format(v)) + "</text>";
+    }
+    var peak = -1; items.forEach(function (it, i) { if (tot(it) > 0 && (peak < 0 || tot(it) > tot(items[peak]))) peak = i; });
+    items.forEach(function (it, i) {
+      var cx = L + band * i + band / 2, x = cx - bw / 2, v1 = Math.max(it.value, 0), v2 = Math.max(it.extra || 0, 0), base = y(0);
+      var cls = it.dim ? " faded" : "";
+      var y1 = v1 > 0 ? Math.min(y(v1), base - 2) : base;
+      if (v1 > 0) s += '<path class="bar' + cls + '" d="' + seg(x, base, y1, bw, v2 > 0 ? 0 : 4) + '"/>';
+      if (v2 > 0) { var y2 = Math.min(y(v1 + v2), y1 - 2); s += '<path class="bar pend' + cls + '" d="' + seg(x, y1, y2, bw, 4) + '"/>'; }
+      if (it.label) s += '<text class="axis" x="' + cx + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(it.label) + "</text>";
+      s += '<rect class="hit" data-i="' + i + '" x="' + (L + band * i) + '" y="' + T + '" width="' + band + '" height="' + ih + '" fill="transparent"/>';
+    });
+    if (peak >= 0) {
+      var pcx = L + band * peak + band / 2, py = y(tot(items[peak])) - 6;
+      var anchor = pcx > W - 60 ? "end" : pcx < L + 40 ? "start" : "middle";
+      s += '<text class="peak" x="' + pcx + '" y="' + Math.max(12, py) + '" text-anchor="' + anchor + '">' + nf0.format(Math.round(tot(items[peak]))) + "</text>";
+    }
+    s += "</svg>";
+    host.innerHTML = s;
+    var t = ensureTip(host);
+    var move = function (e) {
+      var rect = e.target.closest ? e.target.closest(".hit") : null; if (!rect) return;
+      var it = items[+rect.getAttribute("data-i")], hb = host.getBoundingClientRect(), rb = rect.getBoundingClientRect();
+      t.innerHTML = "<b>" + esc(it.tipTitle) + "</b><br>" + esc(it.tipBody);
+      var cx = rb.left - hb.left + rb.width / 2;
+      cx = Math.min(Math.max(cx, 70), hb.width - 70);
+      t.style.left = cx + "px";
+      t.style.top = Math.max(26, (y(tot(it)) - 4)) + "px";
+      t.classList.add("on");
+    };
+    host.querySelectorAll(".hit").forEach(function (r) {
+      r.addEventListener("pointerenter", move); r.addEventListener("pointerdown", move);
+      r.addEventListener("pointerleave", function () { t.classList.remove("on"); });
+    });
+  }
+  function rankList(host, groups, limit) {
+    var arr = Object.keys(groups).map(function (k) { return groups[k]; }).sort(function (a, b) { return b.income - a.income; });
+    if (!arr.length) { host.innerHTML = '<div class="empty" style="padding:16px 0">Нет оплаченных сделок за месяц</div>'; return; }
+    var top = arr.slice(0, limit), mx = Math.max.apply(null, top.map(function (g) { return Math.abs(g.income); })) || 1;
+    host.innerHTML = top.map(function (g) {
+      return '<div class="row"><span class="nm" title="' + esc(g.name) + '">' + esc(g.name) + '</span><div class="track"><div class="fill" style="width:' + Math.max(2, Math.abs(g.income) / mx * 100) + '%"></div></div><span class="val">' + nf2.format(r2(g.income)) + (g.note ? ' <span class="muted">· ' + esc(g.note) + "</span>" : "") + "</span></div>";
+    }).join("") + (arr.length > limit ? '<div class="muted" style="font-size:12px">и ещё ' + (arr.length - limit) + "</div>" : "");
+  }
+  function cmpRow(label, a, b, fmt, kind) {
+    var d = "—", cls = "";
+    if (kind === "pct") { if (a !== null && b !== null) { var diff = a - b; d = (diff >= 0 ? "+" : "") + nf1.format(diff) + " п.п."; cls = diff >= 0 ? "delta-up" : "delta-down"; } }
+    else if (b > 0) { var p = (a - b) / b * 100; d = (p >= 0 ? "+" : "") + nf0.format(Math.round(p)) + "%"; cls = p >= 0 ? "delta-up" : "delta-down"; }
+    return "<tr><td>" + label + '</td><td class="num">' + fmt(a) + '</td><td class="num muted">' + fmt(b) + '</td><td class="num ' + cls + '">' + d + "</td></tr>";
+  }
+  function renderStats() {
+    if (state.tab !== "stats") return;
+    var list = paidOfMonth(view.y, view.m);
+    var pm = view.m === 0 ? 11 : view.m - 1, py = view.m === 0 ? view.y - 1 : view.y;
+    var cur = sumSales(list), prev = sumSales(paidOfMonth(py, pm));
+    // comparison
+    var pendCur = sumSales(state.sales.filter(function (x) { return isOpen(x) && expDay(x).slice(0, 7) === monthKey(); }));
+    var pkey = py + "-" + pad(pm + 1);
+    var pendPrev = sumSales(state.sales.filter(function (x) { return isOpen(x) && expDay(x).slice(0, 7) === pkey; }));
+    $("cmpTitle").textContent = MONTHS[view.m] + " к " + MONTHS[pm];
+    var mf = function (v) { return nf2.format(r2(v)); }, cf = function (v) { return String(v); }, pf = function (v) { return v === null ? "—" : nf1.format(v) + "%"; };
+    var pctC = cur.revenue > 0 ? cur.margin / cur.revenue * 100 : null, pctP = prev.revenue > 0 ? prev.margin / prev.revenue * 100 : null;
+    $("cmpTable").innerHTML = '<table class="cmp"><thead><tr><th>Показатель</th><th class="num">' + esc(MON_SHORT[view.m]) + '</th><th class="num">' + esc(MON_SHORT[pm]) + '</th><th class="num">Изменение</th></tr></thead><tbody>' +
+      cmpRow("Ваш доход", cur.income, prev.income, mf, "num") + cmpRow("Выручка", cur.revenue, prev.revenue, mf, "num") + cmpRow("Маржа", cur.margin, prev.margin, mf, "num") +
+      cmpRow("Маржа, % от выручки", pctC, pctP, pf, "pct") + cmpRow("Оплачено сделок", cur.count, prev.count, cf, "num") +
+      cmpRow("Средний чек", cur.count ? cur.revenue / cur.count : 0, prev.count ? prev.revenue / prev.count : 0, mf, "num") +
+      cmpRow("Ожидается (в работе)", pendCur.income, pendPrev.income, mf, "num") + cmpRow("Потенциал всего", cur.income + pendCur.income, prev.income + pendPrev.income, mf, "num") + "</tbody></table>";
+    // funnel
+    var fmax = 1, frows = STAGES.map(function (g) {
+      var l = stageSales(g.id), n = l.length; if (n > fmax) fmax = n;
+      return { g: g, n: n, sum: sumSales(l) };
+    });
+    $("rankFunnel").innerHTML = frows.map(function (r) {
+      var note = (r.g.id === "paid" ? nf2.format(r2(r.sum.income)) : (r.g.id === "claim" || r.g.id === "cancelled") ? "" : "+" + nf2.format(r2(r.sum.income)));
+      return '<div class="row ' + r.g.cls + '"><span class="nm">' + esc(r.g.name) + '</span><div class="track"><div class="fill st" style="width:' + (r.n ? Math.max(3, r.n / fmax * 100) : 0) + '%"></div></div><span class="val">' + r.n + (note ? ' <span class="muted">· ' + note + "</span>" : "") + "</span></div>";
+    }).join("");
+    var paidAll = state.sales.filter(function (s) { return st(s) === "paid"; }).length, claimAll = state.sales.filter(function (s) { return st(s) === "claim"; }).length;
+    $("claimNote").textContent = "Открытые этапы за все месяцы, остальные за " + MONTHS[view.m] + "." + (paidAll + claimAll > 0 ? " Рекламации за всё время: " + claimAll + " из " + (paidAll + claimAll) + " (" + nf1.format(claimAll / (paidAll + claimAll) * 100) + "%)." : "");
+    // weekday, all history
+    var wd = [0, 0, 0, 0, 0, 0, 0], wp = [0, 0, 0, 0, 0, 0, 0], wc = [0, 0, 0, 0, 0, 0, 0], wpc = [0, 0, 0, 0, 0, 0, 0], wl = ["пн", "вт", "ср", "чт", "пт", "сб", "вс"];
+    state.sales.forEach(function (s) {
+      var k = st(s), inc = calc(s).income;
+      if (k === "paid") { var a1 = (parseDay(s.paidDate || s.date).getDay() + 6) % 7; wd[a1] += inc; wc[a1]++; }
+      else if (isOpen(s)) { var a2 = (parseDay(s.date).getDay() + 6) % 7; wp[a2] += inc; wpc[a2]++; }
+    });
+    barChart($("chartWeek"), wd.map(function (v, i) { return { value: v, extra: wp[i], label: wl[i], tipTitle: wl[i], tipBody: "оплачено " + money(v) + " (" + wc[i] + ") · ожидается " + money(wp[i]) + " (" + wpc[i] + ")" }; }), { maxBar: 28 });
+    // days
+    var dim = new Date(view.y, view.m + 1, 0).getDate(), perDay = [], pendDay = [], cnt = [], cntP = [];
+    for (var d = 1; d <= dim; d++) { perDay.push(0); pendDay.push(0); cnt.push(0); cntP.push(0); }
+    list.forEach(function (s) { var dd = +String(s.paidDate || s.date).slice(8, 10); if (dd >= 1 && dd <= dim) { perDay[dd - 1] += calc(s).income; cnt[dd - 1]++; } });
+    state.sales.forEach(function (s) {
+      if (!isOpen(s)) return;
+      var ed = expDay(s); if (ed.slice(0, 7) !== monthKey()) return;
+      var dd = +ed.slice(8, 10); if (dd >= 1 && dd <= dim) { pendDay[dd - 1] += calc(s).income; cntP[dd - 1]++; }
+    });
+    var items = perDay.map(function (v, i) {
+      var day = i + 1;
+      return { value: v, extra: pendDay[i], label: (day === 1 || day % 5 === 0 || day === dim) ? String(day) : "", tipTitle: day + " " + MON_SHORT[view.m], tipBody: (cnt[i] || cntP[i]) ? "оплачено " + money(v) + " · ожидается " + money(pendDay[i]) : "движения нет" };
+    });
+    $("daysNote").textContent = (cur.count || pendCur.count) ? "оплачено " + money(cur.income) + " · ожидается " + money(pendCur.income) : "";
+    barChart($("chartDays"), items, { maxBar: 20 });
+    // months
+    var ms = [];
+    for (var i = 5; i >= 0; i--) {
+      var mm = view.m - i, yy = view.y; while (mm < 0) { mm += 12; yy--; }
+      var t = sumSales(paidOfMonth(yy, mm)), mkey = yy + "-" + pad(mm + 1);
+      var tp = sumSales(state.sales.filter(function (x) { return isOpen(x) && expDay(x).slice(0, 7) === mkey; }));
+      ms.push({ value: t.income, extra: tp.income, label: MON_SHORT[mm], dim: !(yy === view.y && mm === view.m), tipTitle: MONTHS[mm] + " " + yy, tipBody: "оплачено " + money(t.income) + " (" + t.count + ") · ожидается " + money(tp.income) + " (" + tp.count + ")" });
+    }
+    barChart($("chartMonths"), ms, { maxBar: 56 });
+    // rankings
+    var gc = {}, gp = {}, gk = {}, totInc = 0;
+    list.forEach(function (s) {
+      var kc = String(s.client).trim() || "Без имени", sc = calc(s);
+      (gk[kc.toLowerCase()] = gk[kc.toLowerCase()] || { name: kc, income: 0 }).income += sc.income;
+      itemsOf(s).forEach(function (it) {
+        var c = calcItem(it), kp = String(it.name).trim() || "Без названия", cn = catName(it.category);
+        totInc += c.income;
+        var g = (gc[cn] = gc[cn] || { name: cn, income: 0, rev: 0, mar: 0 }); g.income += c.income; g.rev += c.revenue; g.mar += c.margin;
+        (gp[kp.toLowerCase()] = gp[kp.toLowerCase()] || { name: kp, income: 0 }).income += c.income;
+      });
+    });
+    Object.keys(gc).forEach(function (k) {
+      var g = gc[k], share = totInc > 0 ? Math.round(g.income / totInc * 100) + "%" : "";
+      g.note = share + (g.rev > 0 ? " · маржа " + nf1.format(g.mar / g.rev * 100) + "%" : "");
+    });
+    rankList($("rankCats"), gc, 11); rankList($("rankProducts"), gp, 6); rankList($("rankClients"), gk, 6);
+  }
+
+  function renderAll() {
+    buildIndex();
+    renderHeader(); renderGoal(); renderKpi(); renderEarn(); renderNextUp(); renderStuck(); renderTasks(); renderSales(); renderClients(); renderHours(); renderStats();
+    $("demoBanner").hidden = !(state.tasks.concat(state.sales).some(function (x) { return x.demo; }));
+  }
+
+
+  /* ---------- hours and salary ---------- */
+  /* Schedule 2/2/3 over a 14-day cycle: W = shift, O = day off. Day 0 of the cycle is anchored so that 1 Oct 2026 is a shift followed by 3 days off. */
+  var PATTERN = "WWOOWWWOOWWOOO";
+  state.pay = { salary: 1500, shiftHours: 11, anchor: "2026-09-21" };
+  state.shifts = {};
+  function plannedHours(dstr) {
+    var diff = Math.round((parseDay(dstr) - parseDay(state.pay.anchor)) / 86400000), i = ((diff % 14) + 14) % 14;
+    return PATTERN.charAt(i) === "W" ? Number(state.pay.shiftHours) || 0 : 0;
+  }
+  function hoursOn(dstr) { var o = state.shifts[dstr]; return o != null ? Number(o) || 0 : plannedHours(dstr); }
+  /* Past shifts count as worked as planned unless changed; today counts after the shift ends at 21:00. */
+  function monthPay(y, m) {
+    var dim = new Date(y, m + 1, 0).getDate(), now = new Date(), today = ymd(now), after = now.getHours() >= 21;
+    var norm = 0, total = 0, done = 0, shifts = 0, extra = 0;
+    for (var d = 1; d <= dim; d++) {
+      var ds = y + "-" + pad(m + 1) + "-" + pad(d), p = plannedHours(ds), h = hoursOn(ds);
+      norm += p; total += h; if (p > 0) shifts++;
+      if (h > p) extra += h - p;
+      if (ds < today || (ds === today && after)) done += h;
+    }
+    var rate = norm > 0 ? (Number(state.pay.salary) || 0) / norm : 0;
+    return { norm: norm, total: total, done: done, shifts: shifts, extra: extra, rate: rate, earned: done * rate, proj: total * rate };
+  }
+  function shiftCounts() {
+    var now = new Date(), y = now.getFullYear(), m = now.getMonth(), t = ymd(now), dim = new Date(y, m + 1, 0).getDate(), done = 0, left = 0;
+    for (var d = 1; d <= dim; d++) {
+      var ds = y + "-" + pad(m + 1) + "-" + pad(d);
+      if (hoursOn(ds) > 0) { if (ds <= t) done++; else left++; }
+    }
+    return { done: done, left: left };
+  }
+  /* Where extra shifts would pay off most: income per shift by weekday from past sales, shrunk toward the overall average. */
+  function advice() {
+    var now = new Date();
+    if (view.y !== now.getFullYear() || view.m !== now.getMonth()) return null;
+    var t = ymd(now), dim = new Date(view.y, view.m + 1, 0).getDate();
+    var good = state.sales.filter(function (s) { var k = st(s); return k !== "claim" && k !== "cancelled"; });
+    if (!good.length) return { empty: true };
+    var first = good.reduce(function (m, s) { return String(s.date) < m ? String(s.date) : m; }, "9999");
+    var sum = [0, 0, 0, 0, 0, 0, 0], cnt = [0, 0, 0, 0, 0, 0, 0], totalInc = 0, totalCnt = 0;
+    good.forEach(function (s) { sum[parseDay(s.date).getDay()] += calc(s).income; totalInc += calc(s).income; });
+    var cur = parseDay(first), end = parseDay(t);
+    for (var c = new Date(cur); c <= end; c.setDate(c.getDate() + 1)) {
+      var cs = ymd(c); if (plannedHours(cs) > 0) { cnt[c.getDay()]++; totalCnt++; }
+    }
+    if (totalCnt < 1) return { empty: true };
+    var avg = totalInc / totalCnt, K = 2;
+    var f = forecast(), goal = state.settings.goal, rate = monthPay(view.y, view.m).rate, sh = Number(state.pay.shiftHours) || 11;
+    var days = [];
+    for (var d = now.getDate() + 1; d <= dim; d++) {
+      var ds = view.y + "-" + pad(view.m + 1) + "-" + pad(d);
+      if (plannedHours(ds) === 0 && hoursOn(ds) === 0) {
+        var w = parseDay(ds).getDay(), sc = (sum[w] + K * avg) / (cnt[w] + K);
+        days.push({ ds: ds, d: d, w: w, sales: sc, pay: sh * rate, n: cnt[w] });
+      }
+    }
+    days.sort(function (a, b) { return b.sales - a.sales; });
+    var gap = goal > 0 && f ? goal - f.fPot : 0, perShift = days.length ? days[0].sales : avg, need = 0;
+    if (gap > 0 && perShift > 0) need = Math.ceil(gap / perShift);
+    return { avg: avg, days: days, gap: gap, need: need, goal: goal, fPot: f ? f.fPot : 0, rate: rate, sh: sh, shifts: totalCnt, enough: gap <= 0 && goal > 0 };
+  }
+  function renderAdvice() {
+    var box = $("adviceBox"), a = advice();
+    if (!a) { box.hidden = true; return []; }
+    box.hidden = false;
+    if (a.empty) { box.innerHTML = "<h3>Нужна ли подработка</h3><p>Подсказки появятся, когда в журнале будут продажи по сменам.</p>"; return; }
+    var best = a.days.slice(0, 3), h = "<h3>Нужна ли подработка</h3>";
+    if (!(a.goal > 0)) h += "<p>Задайте цель месяца в настройках, и я скажу, хватает ли смен по графику. Ниже лучшие дни для подработки, если захотите.</p>";
+    else if (a.enough) h += '<p><b class="ok">Можно обойтись без подработки.</b> По графику прогноз ' + esc(money(a.fPot)) + " при цели " + esc(money(a.goal)) + ". Подработка даст только прибавку.</p>";
+    else {
+      var cap = a.days.length, n = Math.min(a.need, cap);
+      h += '<p><b class="lack">По графику не хватает ' + esc(money(a.gap)) + "</b> до цели (прогноз " + esc(money(a.fPot)) + " из " + esc(money(a.goal)) + "). ";
+      h += cap === 0 ? "Свободных выходных до конца месяца нет." : a.need <= cap ? "Закрыть разрыв можно примерно " + a.need + " " + plural(a.need, "подработкой", "подработками", "подработками") + " по " + nf1.format(a.sh) + " ч." : "Даже со всеми выходными (" + cap + ") цель не закрыть, но подработки приблизят к ней.";
+      h += "</p>";
+    }
+    if (best.length) {
+      h += '<div class="adv">' + best.map(function (x, i) {
+        return '<div class="advrow"><span class="mono">' + (i + 1) + ". " + WD[x.w] + ", " + x.d + " " + MON_SHORT[view.m] + "</span><span>≈ +" + esc(money(x.sales)) + " с продаж, +" + esc(money(x.pay)) + " оклад</span></div>";
+      }).join("") + "</div>";
+    }
+    h += '<p class="muted" style="font-size:12px;margin-top:8px">Оценка по ' + a.shifts + " " + plural(a.shifts, "смене", "сменам", "сменам") + " из журнала: средний день приносит " + esc(money(a.avg)) + " процентов, дни недели сглажены общим средним. Чем больше истории, тем точнее подсказка. Оклад за подработку: " + esc(money(a.rate)) + " в час.</p>";
+    box.innerHTML = h;
+    return a.need > 0 ? best.slice(0, Math.min(a.need, 3)).map(function (x) { return x.ds; }) : [];
+  }
+  function renderHours() {
+    var mp = monthPay(view.y, view.m);
+    $("hoursTitle").textContent = "Часы и оклад, " + MONTHS[view.m];
+    var dl = mp.proj - mp.earned;
+    $("payGrid").innerHTML =
+      '<div class="t"><div class="k">Норма месяца</div><div class="v mono">' + nf1.format(mp.norm) + ' ч</div><div class="s">' + mp.shifts + " " + plural(mp.shifts, "смена", "смены", "смен") + " по графику</div></div>" +
+      '<div class="t"><div class="k">Отработано</div><div class="v mono">' + nf1.format(mp.done) + ' ч</div><div class="s">к концу месяца ' + nf1.format(mp.total) + " ч" + (mp.extra > 0 ? ", подработка " + nf1.format(mp.extra) + " ч" : "") + "</div></div>" +
+      '<div class="t"><div class="k">Оклад начислен</div><div class="v mono">' + esc(money(mp.earned)) + '</div><div class="s">за месяц ≈ ' + esc(money(mp.proj)) + "</div></div>" +
+      '<div class="t"><div class="k">Час стоит</div><div class="v mono">' + esc(money(mp.rate)) + '</div><div class="s">оклад ' + esc(money(state.pay.salary)) + " ÷ норма</div></div>";
+    var tipDays = renderAdvice() || [];
+    var first = new Date(view.y, view.m, 1), dim = new Date(view.y, view.m + 1, 0).getDate(), lead = (first.getDay() + 6) % 7, today = ymd(new Date());
+    var h = ["пн","вт","ср","чт","пт","сб","вс"].map(function (n) { return '<div class="wd">' + n + "</div>"; }).join("");
+    for (var i = 0; i < lead; i++) h += '<div class="day blank"></div>';
+    for (var d = 1; d <= dim; d++) {
+      var ds = view.y + "-" + pad(view.m + 1) + "-" + pad(d), p = plannedHours(ds), a = hoursOn(ds), ch = state.shifts[ds] != null && Number(state.shifts[ds]) !== p;
+      var cls = "day" + (a > 0 ? (p > 0 ? " work" : " extra") : " off") + (ch ? " changed" : "") + (ds === today ? " today" : "") + (ds > today ? " future" : "") + (state.hoursDay === ds ? " sel" : "") + (tipDays.indexOf(ds) >= 0 ? " sug" : "");
+      h += '<button type="button" class="' + cls + '" data-day="' + ds + '" aria-label="' + d + " " + MONTHS[view.m] + ", " + nf1.format(a) + ' ч"><span class="dn">' + d + '</span><span class="hh">' + (a > 0 ? nf1.format(a) + " ч" : (tipDays.indexOf(ds) >= 0 ? "★ доп" : "вых")) + "</span></button>";
+    }
+    $("cal").innerHTML = h;
+    var ed = $("hourEdit");
+    if (state.hoursDay && state.hoursDay.slice(0, 7) === monthKey()) {
+      var ds2 = state.hoursDay, p2 = plannedHours(ds2);
+      ed.hidden = false;
+      ed.innerHTML = '<div class="field"><label for="hourVal">' + esc(ddmm(ds2)) + ': часов отработано</label><input id="hourVal" class="mono" type="number" min="0" max="24" step="0.5" inputmode="decimal" value="' + hoursOn(ds2) + '"></div>' +
+        '<button class="btn" type="button" data-hact="save">Сохранить</button>' +
+        '<button class="btn ghost" type="button" data-hact="plan">По графику (' + nf1.format(p2) + " ч)</button>" +
+        '<button class="btn ghost" type="button" data-hact="zero">Не выходил</button>' +
+        '<button class="btn ghost" type="button" data-hact="close">Закрыть</button>';
+    } else { ed.hidden = true; ed.innerHTML = ""; }
+    $("payNote").textContent = "Нажмите на день, чтобы изменить часы: подработку, больничный, отгул. Часы за пределами графика оплачиваются по той же ставке, а недоработка уменьшает оклад. Рамкой отмечены дни, где часы отличаются от графика. Оклад не входит в цель месяца и в прогноз по продажам.";
+  }
+  function saveShift(ds, hours) {
+    if (!needDb()) return;
+    var p = plannedHours(ds), ref = state.db.doc("shifts/" + ds);
+    if (hours === p) { delete state.shifts[ds]; ref.delete().then(function () { renderAll(); }, fail); }
+    else { state.shifts[ds] = hours; ref.set({ date: ds, hours: hours, updatedAt: Date.now() }).then(function () { renderAll(); }, fail); }
+    renderAll();
+  }
+  $("cal").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-day]"); if (!b) return;
+    state.hoursDay = b.getAttribute("data-day"); renderHours();
+    var el = $("hourVal"); if (el && el.focus) el.focus();
+  });
+  $("hourEdit").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-hact]"); if (!b || !state.hoursDay) return;
+    var act = b.getAttribute("data-hact"), ds = state.hoursDay;
+    if (act === "close") { state.hoursDay = ""; renderHours(); return; }
+    if (act === "plan") { saveShift(ds, plannedHours(ds)); toast("Вернул по графику"); return; }
+    if (act === "zero") { saveShift(ds, 0); toast("Отмечено: не выходил"); return; }
+    var v = Number($("hourVal").value);
+    if (!isFinite(v) || v < 0 || v > 24) { toast("Часы от 0 до 24"); return; }
+    saveShift(ds, Math.round(v * 2) / 2); toast("Часы сохранены");
+  });
+  $("payToggle").addEventListener("click", function () {
+    var f = $("payForm"), open = f.hidden;
+    if (open) { $("payOklad").value = state.pay.salary; $("payShift").value = state.pay.shiftHours; }
+    f.hidden = !open; this.setAttribute("aria-expanded", String(open));
+  });
+  $("payForm").addEventListener("submit", function (e) {
+    e.preventDefault(); if (!needDb()) return;
+    var sal = Math.max(0, Number($("payOklad").value) || 0), sh = Math.max(1, Math.min(24, Number($("payShift").value) || 11));
+    state.db.doc("settings/pay").set({ salary: sal, shiftHours: sh, anchor: state.pay.anchor, updatedAt: Date.now() }).then(function () {
+      state.pay.salary = sal; state.pay.shiftHours = sh; $("payForm").hidden = true; $("payToggle").setAttribute("aria-expanded", "false"); toast("Сохранено"); renderAll();
+    }, fail);
+  });
+
+  /* ---------- tabs and filters ---------- */
+  var TABS = ["tasks", "sales", "clients", "hours", "stats"];
+  function setTab(name) {
+    state.tab = name;
+    TABS.forEach(function (n) {
+      $("tab-" + n).setAttribute("aria-selected", String(n === name));
+      var p = $("panel-" + n); p.hidden = n !== name; if (n !== "stats") p.style.display = n === name ? "flex" : "none";
+    });
+    if (name === "stats") renderStats();
+  }
+  TABS.forEach(function (n) { $("tab-" + n).addEventListener("click", function () { setTab(n); }); });
+  $("prevMonth").addEventListener("click", function () { view.m--; if (view.m < 0) { view.m = 11; view.y--; } renderAll(); });
+  $("nextMonth").addEventListener("click", function () { view.m++; if (view.m > 11) { view.m = 0; view.y++; } renderAll(); });
+  $("taskFilters").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-f]"); if (!b) return;
+    state.filter = b.getAttribute("data-f"); state.day = ""; $("fDay").value = "";
+    $("taskFilters").querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", String(x === b)); });
+    renderTasks();
+  });
+  $("fDay").addEventListener("change", function () {
+    state.day = this.value;
+    $("taskFilters").querySelectorAll("button").forEach(function (x) { x.setAttribute("aria-pressed", "false"); });
+    if (!state.day) { state.filter = "all"; $("taskFilters").querySelector('[data-f="all"]').setAttribute("aria-pressed", "true"); }
+    renderTasks();
+  });
+  $("stages").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-stage]"); if (!b) return;
+    state.stage = b.getAttribute("data-stage"); $("q").value = ""; state.q = "";
+    renderTasks(); renderSales(); renderClients();
+  });
+  $("q").addEventListener("input", function () {
+    state.q = this.value.trim().toLowerCase();
+    renderTasks(); renderSales(); renderClients();
+  });
+
+  /* ---------- settings ---------- */
+  $("toggleSettings").addEventListener("click", function () {
+    var box = $("settingsBox"), open = box.hidden;
+    if (open) {
+      $("setGoal").value = state.settings.goal || "";
+      $("setMinMargin").value = state.settings.minMargin;
+      $("setFollow").value = state.settings.followupMonths;
+      $("setStaleBuy").value = state.settings.staleBuy; $("setStaleShip").value = state.settings.staleShip;
+    }
+    box.hidden = !open; this.setAttribute("aria-expanded", String(open));
+    if (open) $("setGoal").focus();
+  });
+  $("closeSettings").addEventListener("click", function () { $("settingsBox").hidden = true; $("toggleSettings").setAttribute("aria-expanded", "false"); });
+  function days(v, def) { return v === "" ? def : Math.max(0, Math.min(365, Math.round(Number(v) || 0))); }
+  $("settingsBox").addEventListener("submit", function (e) {
+    e.preventDefault(); if (!needDb()) return;
+    var rec = {
+      goal: Math.max(0, Number($("setGoal").value) || 0),
+      minMargin: Math.max(0, Math.min(100, $("setMinMargin").value === "" ? 10 : Number($("setMinMargin").value) || 0)),
+      followupMonths: Math.max(0, Math.min(36, Math.round($("setFollow").value === "" ? 3 : Number($("setFollow").value) || 0))),
+      staleBuy: days($("setStaleBuy").value, 5), staleShip: days($("setStaleShip").value, 10),
+      updatedAt: Date.now()
+    };
+    state.db.doc("settings/main").set(rec).then(function () {
+      state.settings = { goal: rec.goal, minMargin: rec.minMargin, followupMonths: rec.followupMonths, staleBuy: rec.staleBuy, staleShip: rec.staleShip };
+      $("settingsBox").hidden = true; $("toggleSettings").setAttribute("aria-expanded", "false");
+      toast("Настройки сохранены"); renderAll();
+    }, fail);
+  });
+
+  /* ---------- writes ---------- */
+  function needDb() { if (!state.db) { toast("Не удалось подключить базу данных"); return false; } return true; }
+  function fail(e) { toast(e && e.code === "quota_exceeded" ? "База заполнена" : "Не удалось сохранить, попробуйте ещё раз"); }
+
+  function followupTask(s) {
+    var n = state.settings.followupMonths; if (!(n > 0)) return null;
+    var dt = new Date(); dt.setMonth(dt.getMonth() + n); dt.setHours(10, 0, 0, 0);
+    var first = itemsOf(s)[0] || {};
+    return { deal: s.deal || "", phone: s.phone || "", action: "Повторная продажа: узнать, как товар" + (first.name ? " (" + first.name + ")" : "") + ", предложить аксессуары и сервис", due: dueStr(dt), done: false, createdAt: Date.now(), auto: true, saleId: s.id || "" };
+  }
+  function setStatus(id, next) {
+    if (!needDb()) return;
+    var s = null; state.sales.forEach(function (x) { if (x.id === id) s = x; });
+    if (!s || st(s) === next) return;
+    var ts = Date.now(), hist = Array.isArray(s.history) ? s.history.slice() : [];
+    hist.push({ s: next, at: ts });
+    var patch = { status: next, statusAt: ts, history: hist }, follow = null;
+    if (next === "paid") {
+      patch.paidDate = ymd(new Date());
+      if (!s.followupDone) { follow = followupTask(s); if (follow) { follow.saleId = id; patch.followupDone = true; } }
+    }
+    state.db.doc("sales/" + id).update(patch).then(function () {
+      var c = calc(s);
+      if (next === "paid") toast("Оплачено · в доход засчитано " + money(c.income));
+      else if (next === "claim") toast("Рекламация: доход по сделке не засчитывается");
+      else if (next === "cancelled") toast("Отказ: доход по сделке не ожидается");
+      else toast("Статус: " + stageOf(next).name);
+      if (follow) return state.db.collection("tasks").add(follow);
+    }).catch(fail);
+  }
+
+  $("taskForm").addEventListener("submit", function (e) {
+    e.preventDefault(); if (!needDb()) return;
+    var rec = { deal: $("tDeal").value.trim(), phone: $("tPhone").value.trim(), action: $("tAction").value.trim(), due: $("tDate").value + "T" + $("tTime").value, done: false, createdAt: Date.now() };
+    state.db.collection("tasks").add(rec).then(function () {
+      $("tDeal").value = ""; $("tPhone").value = ""; $("tAction").value = ""; $("tHint").hidden = true; $("tDeal").focus(); toast("Задача добавлена");
+    }, fail);
+  });
+  $("saleForm").addEventListener("submit", function (e) {
+    e.preventDefault(); if (!needDb()) return;
+    var items = readItems().map(function (i) { return { category: i.category, name: i.name, qty: i.qty, buy: i.buy, sell: i.sell }; });
+    var status = $("sStatus").value, ts = Date.now();
+    var rec = { date: $("sDate").value, client: $("sClient").value.trim(), phone: $("sPhone").value.trim(), deal: $("sDeal").value.trim(), url: normUrl($("sUrl").value), items: items, status: status, statusAt: ts, history: [{ s: status, at: ts }], createdAt: ts };
+    var ex = Number($("sExpense").value) || 0; if (ex > 0) rec.expense = ex;
+    var follow = null;
+    if (status === "paid") { rec.paidDate = ymd(new Date()); follow = followupTask(rec); if (follow) rec.followupDone = true; }
+    state.db.collection("sales").add(rec).then(function (ref) {
+      var c = calc(rec);
+      toast(status === "paid" ? "Записано как оплаченное · доход " + money(c.income) : "Записано · после оплаты ваш доход " + money(c.income));
+      $("sClient").value = ""; $("sPhone").value = ""; $("sDeal").value = ""; $("sUrl").value = ""; $("sExpense").value = ""; $("sStatus").value = "purchasing"; $("sHint").hidden = true;
+      $("saleItems").innerHTML = ""; addItemRow(); updatePreview(); $("sClient").focus();
+      state.stage = status === "paid" ? "paid" : "open"; state.q = ""; $("q").value = "";
+      renderAll();
+      if (follow) { follow.saleId = ref && ref.id ? ref.id : ""; return state.db.collection("tasks").add(follow); }
+    }).catch(fail);
+  });
+
+  /* sale items: one sale can hold several products */
+  var itemSeq = 0;
+  function itemRowHtml(n) {
+    var opts = CATS.map(function (c) { return '<option value="' + c.id + '">' + esc(c.name) + "</option>"; }).join("");
+    return '<div class="item"><div class="item-grid">' +
+      '<div class="field"><label for="ic' + n + '">Категория</label><select id="ic' + n + '" data-k="category">' + opts + "</select></div>" +
+      '<div class="field wide"><label for="in' + n + '">Товар</label><input id="in' + n + '" data-k="name" required placeholder="Холодильник Atlant XM 4421"></div>' +
+      '<div class="field"><label for="iq' + n + '">Кол-во, шт.</label><input id="iq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" value="1" required inputmode="numeric"></div>' +
+      '<div class="field"><label for="ib' + n + '">Закуп за 1 шт.</label><input id="ib' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
+      '<div class="field"><label for="is' + n + '">Продажа за 1 шт.</label><input id="is' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
+      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
+  }
+  function syncRm() { var rows = $("saleItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
+  function addItemRow() {
+    itemSeq++;
+    var d = document.createElement("div"); d.innerHTML = itemRowHtml(itemSeq);
+    $("saleItems").appendChild(d.firstChild); syncRm();
+  }
+  function rowVal(r, k) { return r.querySelector('[data-k="' + k + '"]').value; }
+  function readItems() {
+    return Array.prototype.map.call($("saleItems").querySelectorAll(".item"), function (r) {
+      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")) };
+    });
+  }
+  function updatePreview() { renderPreview($("saleItems"), $("salePreview"), $("sExpense")); }
+  function renderPreview(box, el, expEl) {
+    var filled = [], min = state.settings.minMargin;
+    box.querySelectorAll(".item").forEach(function (r) {
+      var b = rowVal(r, "buy"), s = rowVal(r, "sell"), q = Number(rowVal(r, "qty")), cel = r.querySelector("[data-calc]");
+      if (b === "" || s === "" || !(q > 0)) { cel.textContent = "Введите закуп и цену продажи"; return; }
+      var it = { qty: q, buy: b, sell: s }, c = calcItem(it), p = pctOf(c); filled.push(it);
+      cel.innerHTML = "Маржа <b class=\"mono" + (c.margin < 0 ? " neg" : "") + "\">" + money(c.margin) + "</b>" + (p !== null ? " (" + nf1.format(p) + "%)" : "") + " · ваш доход <b class=\"mono" + (c.income < 0 ? " neg" : "") + "\">" + money(c.income) + "</b>" + (p !== null && p < min ? ' <span class="warnline">низкая маржа, порог ' + nf1.format(min) + "%</span>" : "");
+    });
+    if (!filled.length) { el.textContent = "Введите закуп и цену продажи, и здесь появится ваш доход."; return; }
+    var t = calc({ items: filled }), tp = pctOf(t), ex = Number(expEl.value) || 0;
+    el.innerHTML = "<span>Товаров <b class=\"mono\">" + filled.length + "</b></span><span>Выручка <b class=\"mono\">" + money(t.revenue) + "</b></span><span>Маржа <b class=\"mono" + (t.margin < 0 ? " neg" : "") + "\">" + money(t.margin) + "</b>" + (tp !== null ? " (" + nf1.format(tp) + "%)" : "") + "</span><span>Ваш доход (10%) <b class=\"mono" + (t.income < 0 ? " neg" : "") + "\">" + money(t.income) + "</b></span>" +
+      (ex > 0 ? "<span>Расходы <b class=\"mono\">−" + money(ex) + "</b>, чистыми <b class=\"mono" + (t.income - ex < 0 ? " neg" : "") + "\">" + money(t.income - ex) + "</b></span>" : "") +
+      (tp !== null && tp < min ? '<span class="warnline">Маржа по сделке ниже порога ' + nf1.format(min) + "%</span>" : "");
+  }
+  $("saleForm").addEventListener("input", function (e) { if (e.target.id === "sPhone") saleHint(); updatePreview(); });
+  $("saleForm").addEventListener("change", updatePreview);
+  $("saleItems").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-rm]"); if (!b) return;
+    b.closest(".item").remove(); syncRm(); updatePreview();
+  });
+  $("addItem").addEventListener("click", function () { addItemRow(); var rows = $("saleItems").querySelectorAll(".item"); rows[rows.length - 1].querySelector("[data-k=\"name\"]").focus(); });
+  $("sStatus").innerHTML = STAGES.map(function (g) { return '<option value="' + g.id + '">' + g.name + "</option>"; }).join("");
+
+  /* client hints under the phone fields */
+  function saleHint() {
+    var el = $("sHint"), c = clientByPhone($("sPhone").value);
+    if (!c || !c.sales.length) { el.hidden = true; return; }
+    var parts = [c.sales.length + " " + plural(c.sales.length, "сделка", "сделки", "сделок")];
+    if (c.paidCount) parts.push("оплачено " + c.paidCount + ", ваш доход " + money(c.income));
+    if (c.openCount) parts.push("в работе " + c.openCount);
+    el.innerHTML = "Клиент уже в журнале: <b>" + esc(clientLabel(c)) + "</b> · " + esc(parts.join(" · "));
+    el.hidden = false;
+    if (!$("sClient").value.trim() && c.name) $("sClient").value = c.name;
+  }
+  function taskHint() {
+    var el = $("tHint"), c = clientByPhone($("tPhone").value);
+    if (!c) { el.hidden = true; return; }
+    var open = c.sales.filter(isOpen);
+    var deals = open.map(function (s) { return s.deal ? "№ " + s.deal : "без номера"; });
+    el.innerHTML = "Клиент: <b>" + esc(clientLabel(c)) + "</b>" + (deals.length ? " · сделки в работе: " + esc(deals.join(", ")) : " · открытых сделок нет");
+    el.hidden = false;
+    if (!$("tDeal").value.trim() && open.length === 1 && open[0].deal) $("tDeal").value = open[0].deal;
+  }
+  $("tPhone").addEventListener("input", taskHint);
+
+  function goTask(phone, deal) {
+    setTab("tasks");
+    $("tPhone").value = phone || ""; $("tDeal").value = deal || ""; taskHint();
+    $("taskForm").scrollIntoView({ behavior: "smooth", block: "start" });
+    ($("tPhone").value ? ($("tDeal").value ? $("tAction") : $("tDeal")) : $("tPhone")).focus({ preventScroll: true });
+  }
+  function goSale(name, phone) {
+    setTab("sales");
+    $("sClient").value = name || ""; $("sPhone").value = phone || ""; saleHint();
+    $("saleForm").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("saleItems").querySelector('[data-k="name"]').focus({ preventScroll: true });
+  }
+
+  /* ---------- edit a recorded sale ---------- */
+  var editId = "", editSeq = 0, editOpener = null;
+  function editRowHtml(n, it) {
+    it = it || {};
+    var cat = "other"; CATS.forEach(function (c) { if (c.id === it.category) cat = c.id; });
+    var opts = CATS.map(function (c) { return '<option value="' + c.id + '"' + (c.id === cat ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("");
+    var qty = it.qty == null || it.qty === "" ? 1 : it.qty;
+    return '<div class="item"><div class="item-grid">' +
+      '<div class="field"><label for="xc' + n + '">Категория</label><select id="xc' + n + '" data-k="category">' + opts + "</select></div>" +
+      '<div class="field wide"><label for="xn' + n + '">Товар</label><input id="xn' + n + '" data-k="name" required value="' + esc(it.name) + '" placeholder="Холодильник Atlant XM 4421"></div>' +
+      '<div class="field"><label for="xq' + n + '">Кол-во, шт.</label><input id="xq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" required inputmode="numeric" value="' + esc(qty) + '"></div>' +
+      '<div class="field"><label for="xb' + n + '">Закуп за 1 шт.</label><input id="xb' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.buy) + '"></div>' +
+      '<div class="field"><label for="xs' + n + '">Продажа за 1 шт.</label><input id="xs' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.sell) + '"></div>' +
+      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
+  }
+  function syncEditRm() { var rows = $("editItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
+  function addEditRow(it) {
+    editSeq++;
+    var d = document.createElement("div"); d.innerHTML = editRowHtml(editSeq, it);
+    $("editItems").appendChild(d.firstChild); syncEditRm();
+  }
+  function readEditItems() {
+    return Array.prototype.map.call($("editItems").querySelectorAll(".item"), function (r) {
+      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")) };
+    });
+  }
+  function editPreview() { renderPreview($("editItems"), $("editPreview"), $("eExpense")); }
+  function findSale(id) { var s = null; state.sales.forEach(function (x) { if (x.id === id) s = x; }); return s; }
+  function openEdit(id, opener) {
+    var s = findSale(id); if (!s) return;
+    editId = id; editOpener = opener || null;
+    var paid = st(s) === "paid";
+    $("editSub").textContent = (s.deal ? "Сделка № " + s.deal + " · " : "") + stageOf(st(s)).name + ". Статус меняется в таблице.";
+    $("eDate").value = s.date || ymd(new Date());
+    $("ePaidWrap").hidden = !paid; $("eHint").hidden = !paid; $("ePaid").value = s.paidDate || s.date || "";
+    $("eClient").value = s.client || ""; $("ePhone").value = s.phone || ""; $("eDeal").value = s.deal || ""; $("eUrl").value = s.url || "";
+    $("eExpense").value = expOf(s) > 0 ? expOf(s) : "";
+    $("editItems").innerHTML = "";
+    itemsOf(s).forEach(function (it) { addEditRow(it); });
+    if (!$("editItems").children.length) addEditRow();
+    editPreview();
+    $("editScrim").hidden = false; document.body.style.overflow = "hidden";
+    $("editScrim").scrollTop = 0;
+    $("eClient").focus({ preventScroll: true });
+  }
+  function closeEdit() {
+    $("editScrim").hidden = true; document.body.style.overflow = ""; editId = "";
+    var o = editOpener; editOpener = null;
+    if (o && document.body.contains(o)) o.focus({ preventScroll: true });
+  }
+  $("editForm").addEventListener("input", editPreview);
+  $("editForm").addEventListener("change", editPreview);
+  $("editItems").addEventListener("click", function (e) {
+    var b = e.target.closest("[data-rm]"); if (!b) return;
+    b.closest(".item").remove(); syncEditRm(); editPreview();
+  });
+  $("editAddItem").addEventListener("click", function () {
+    addEditRow(); editPreview();
+    var rows = $("editItems").querySelectorAll(".item"); rows[rows.length - 1].querySelector('[data-k="name"]').focus();
+  });
+  $("editClose").addEventListener("click", closeEdit);
+  $("editCancel").addEventListener("click", closeEdit);
+  document.addEventListener("keydown", function (e) {
+    if ($("editScrim").hidden) return;
+    if (e.key === "Escape") { e.preventDefault(); closeEdit(); return; }
+    if (e.key !== "Tab") return;
+    var f = Array.prototype.filter.call($("editForm").querySelectorAll("button, input, select"), function (x) { return !x.disabled && x.offsetParent !== null; });
+    if (!f.length) return;
+    var first = f[0], last = f[f.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  });
+  $("editForm").addEventListener("submit", function (e) {
+    e.preventDefault(); if (!needDb() || !editId) return;
+    var id = editId, s = findSale(id);
+    if (!s) { toast("Эта продажа уже удалена"); closeEdit(); return; }
+    var patch = {
+      date: $("eDate").value, client: $("eClient").value.trim(), phone: $("ePhone").value.trim(), deal: $("eDeal").value.trim(), url: normUrl($("eUrl").value),
+      items: readEditItems(), expense: Math.max(0, r2(Number($("eExpense").value) || 0)), editedAt: Date.now()
+    };
+    if (st(s) === "paid" && !$("ePaidWrap").hidden && $("ePaid").value) patch.paidDate = $("ePaid").value;
+    state.db.doc("sales/" + id).update(patch).then(function () {
+      // automatic follow-up reminders keep the client's current phone and deal number
+      var jobs = state.tasks.filter(function (t) { return t.saleId === id && t.auto && !t.done; }).map(function (t) { return state.db.doc("tasks/" + t.id).update({ deal: patch.deal, phone: patch.phone }); });
+      return Promise.all(jobs);
+    }).then(function () { toast("Изменения сохранены"); closeEdit(); }).catch(fail);
+  });
+
+  var armTimer = null;
+  document.addEventListener("click", function (e) {
+    var cp = e.target.closest("[data-copy]");
+    if (cp) {
+      var val = cp.getAttribute("data-copy");
+      try { navigator.clipboard.writeText(val).then(function () { toast("Телефон скопирован"); }, function () { toast("Выделите номер и скопируйте вручную"); }); } catch (x) { toast("Выделите номер и скопируйте вручную"); }
+      return;
+    }
+    var eb = e.target.closest("[data-edit]");
+    if (eb) { var erow = eb.closest("[data-id]"); if (erow) openEdit(erow.getAttribute("data-id"), eb); return; }
+    var b = e.target.closest("button[data-act]"); if (!b) return;
+    var act = b.getAttribute("data-act"), host = b.closest("[data-id]"), id = host && host.getAttribute("data-id");
+    // actions that only change the view
+    if (act === "toggleclient") { var ck = b.closest("[data-ck]").getAttribute("data-ck"); state.openClient = state.openClient === ck ? "" : ck; renderClients(); return; }
+    if (act === "taskfor") { var sl = null; state.sales.forEach(function (x) { if (x.id === id) sl = x; }); if (sl) goTask(sl.phone, sl.deal); return; }
+    if (act === "salefor" || act === "taskforclient") {
+      var cc = state.cidx.map[b.closest("[data-ck]").getAttribute("data-ck")]; if (!cc) return;
+      if (act === "salefor") goSale(cc.name, cc.phone); else goTask(cc.phone, b.getAttribute("data-deal"));
+      return;
+    }
+    if (!needDb()) return;
+    if (act === "done") state.db.doc("tasks/" + id).update({ done: true, doneAt: Date.now() }).catch(fail);
+    else if (act === "reopen") state.db.doc("tasks/" + id).update({ done: false }).catch(fail);
+    else if (act === "next") setStatus(id, b.getAttribute("data-to"));
+    else if (act === "snz1" || act === "snzT" || act === "snz3") {
+      var tk = null; state.tasks.forEach(function (x) { if (x.id === id) tk = x; }); if (!tk) return;
+      var base = dueDate(tk), nd = new Date();
+      if (act === "snz1") nd = new Date(nd.getTime() + 3600000);
+      else { nd.setDate(nd.getDate() + (act === "snzT" ? 1 : 3)); nd.setHours(base.getHours(), base.getMinutes(), 0, 0); }
+      state.db.doc("tasks/" + id).update({ due: dueStr(nd) }).then(function () { toast("Задача перенесена на " + dayLabel(ymd(nd)) + ", " + pad(nd.getHours()) + ":" + pad(nd.getMinutes())); }).catch(fail);
+    }
+    else if (act === "del" || act === "delsale") {
+      if (!b.classList.contains("armed")) {
+        document.querySelectorAll(".icon-btn.armed").forEach(function (x) { x.classList.remove("armed"); x.textContent = "Удалить"; });
+        b.classList.add("armed"); b.textContent = "Точно?";
+        clearTimeout(armTimer); armTimer = setTimeout(function () { b.classList.remove("armed"); b.textContent = "Удалить"; }, 3000);
+        return;
+      }
+      state.db.doc((act === "del" ? "tasks/" : "sales/") + id).delete().then(function () { toast("Удалено"); }).catch(fail);
+    }
+  });
+  document.addEventListener("change", function (e) {
+    var sel = e.target.closest ? e.target.closest("select[data-st]") : null; if (!sel) return;
+    setStatus(sel.getAttribute("data-st"), sel.value);
+    renderSales();
+  });
+  $("clearDemo").addEventListener("click", function () {
+    if (!needDb()) return;
+    var jobs = [];
+    state.tasks.forEach(function (t) { if (t.demo) jobs.push(state.db.doc("tasks/" + t.id).delete()); });
+    state.sales.forEach(function (s) { if (s.demo) jobs.push(state.db.doc("sales/" + s.id).delete()); });
+    Promise.all(jobs).then(function () { toast("Примеры удалены"); }).catch(fail);
+  });
+
+  /* ---------- CSV ---------- */
+  function exportCsv(list, name) {
+    if (!state.downloads) { toast("Скачивание недоступно в этом окне"); return; }
+    if (!list.length) { toast("Нет продаж для выгрузки"); return; }
+    var q = function (v) { return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"'; };
+    var rows = [["Дата", "Покупатель", "Телефон", "Сделка", "Статус", "Дата оплаты", "Категория", "Товар", "Кол-во", "Закуп за шт.", "Продажа за шт.", "Маржа", "Доход 10%", "Расходы по сделке"].map(q).join(";")];
+    list.slice().sort(function (a, b) { return String(a.date) < String(b.date) ? -1 : 1; }).forEach(function (s) {
+      itemsOf(s).forEach(function (it, i) {
+        var c = calcItem(it);
+        rows.push([s.date, s.client, s.phone, s.deal, stageOf(st(s)).name, s.paidDate || "", catName(it.category), it.name, it.qty, it.buy, it.sell, r2(c.margin), r2(c.income), i === 0 ? expOf(s) : ""].map(q).join(";"));
+      });
+    });
+    state.downloads.save({ filename: name, data: "\uFEFF" + rows.join("\r\n") }).catch(function (err) { if (!err || err.code !== "declined") toast("Не удалось скачать файл"); });
+  }
+  try { var sv0 = localStorage.getItem("salesSort"); if (sv0 && $("salesSort").querySelector('option[value="' + sv0 + '"]')) { state.sort = sv0; $("salesSort").value = sv0; } } catch (e) {}
+  $("salesSort").addEventListener("change", function () { state.sort = this.value; try { localStorage.setItem("salesSort", this.value); } catch (e) {} renderSales(); });
+  $("exportMonth").addEventListener("click", function () { exportCsv(state.sales.filter(function (s) { return String(s.date).slice(0, 7) === monthKey(); }), "prodazhi-" + monthKey() + ".csv"); });
+  $("exportAll").addEventListener("click", function () { exportCsv(state.sales, "prodazhi-vse.csv"); });
+
+  /* ---------- boot ---------- */
+  var td = ymd(new Date());
+  $("tDate").value = td; $("sDate").value = td;
+  addItemRow();
+  setTab("tasks");
+  renderAll();
+  setInterval(function () { renderNextUp(); }, 30000);
+  var rz; window.addEventListener("resize", function () { clearTimeout(rz); rz = setTimeout(renderStats, 120); });
+
+  function docs(snap) { return snap.docs.map(function (d) { var o = Object.assign({}, d.data() || {}); o.id = d.id; return o; }); }
+  function boot() {
+    if (!window.claude || !window.claude.use) { toast("База данных недоступна"); return; }
+    Promise.all([window.claude.use("db"), window.claude.use("downloads")]).then(function (r) {
+      state.db = r[0]; state.downloads = r[1];
+      if (!state.db) { state.gotTasks = true; state.gotSales = true; renderAll(); $("taskList").innerHTML = '<div class="empty"><b>База данных недоступна</b>Откройте журнал под своим аккаунтом Claude.</div>'; return; }
+      state.db.collection("tasks").onSnapshot(function (snap) { state.tasks = docs(snap); state.gotTasks = true; renderAll(); }, function () { state.gotTasks = true; renderAll(); });
+      state.db.collection("sales").onSnapshot(function (snap) { state.sales = docs(snap); state.gotSales = true; renderAll(); }, function () { state.gotSales = true; renderAll(); });
+      state.db.collection("shifts").onSnapshot(function (snap) { var m = {}; docs(snap).forEach(function (x) { if (x.date) m[x.date] = x.hours; }); state.shifts = m; renderAll(); }, function () {});
+      state.db.doc("settings/pay").onSnapshot(function (snap) {
+        var d = snap.exists ? (snap.data() || {}) : {};
+        state.pay = { salary: d.salary == null ? 1500 : Number(d.salary) || 0, shiftHours: d.shiftHours == null ? 11 : Number(d.shiftHours) || 11, anchor: d.anchor || "2026-09-21" };
+        renderAll();
+      }, function () {});
+      state.db.doc("settings/main").onSnapshot(function (snap) {
+        var d = snap.exists ? (snap.data() || {}) : {};
+        state.settings = { goal: Number(d.goal) || 0, minMargin: d.minMargin == null ? 10 : Number(d.minMargin), followupMonths: d.followupMonths == null ? 3 : Number(d.followupMonths), staleBuy: d.staleBuy == null ? 5 : Number(d.staleBuy), staleShip: d.staleShip == null ? 10 : Number(d.staleShip) };
+        renderAll(); updatePreview();
+      }, function () {});
+    }).catch(function () { state.gotTasks = true; state.gotSales = true; renderAll(); });
+  }
+  boot();
+})();
+</script>
+</body>
+</html>
