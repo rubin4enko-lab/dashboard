@@ -2,7 +2,9 @@
 (function () {
   "use strict";
   var cfg = window.FIREBASE_CONFIG || {};
-  var configured = cfg.apiKey && String(cfg.apiKey).indexOf("PASTE") < 0 && window.firebase;
+  var hasCfg = !!(cfg.apiKey && String(cfg.apiKey).indexOf("PASTE") < 0 && cfg.projectId && String(cfg.projectId).indexOf("PASTE") < 0);
+  var hasSdk = !!window.firebase;
+  var configured = hasCfg && hasSdk;
   var fs = null, auth = null, uid = null, email = "";
   var COLS = ["sales", "tasks", "shifts"], DOCS = ["settings/main", "settings/pay"];
 
@@ -13,7 +15,8 @@
   /* ---------- login screen ---------- */
   var gate = el("div", { id: "gate", role: "dialog", "aria-modal": "true" });
   gate.style.cssText = "position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;padding:20px;background:var(--bg,#f3f5f7);overflow:auto";
-  function showGate(html) { gate.innerHTML = '<div style="width:100%;max-width:380px;background:var(--surface,#fff);color:var(--ink,#101418);border:1px solid var(--line,#e0e5ea);border-radius:12px;padding:22px;font-family:var(--font-sans,sans-serif)">' + html + "</div>"; if (!gate.parentNode) document.body.appendChild(gate); }
+  function whenBody(fn) { if (document.body) fn(); else document.addEventListener("DOMContentLoaded", fn); }
+  function showGate(html) { whenBody(function () { gate.innerHTML = '<div style="width:100%;max-width:380px;background:var(--surface,#fff);color:var(--ink,#101418);border:1px solid var(--line,#e0e5ea);border-radius:12px;padding:22px;font-family:var(--font-sans,sans-serif)">' + html + "</div>"; if (!gate.parentNode) document.body.appendChild(gate); }); }
   function hideGate() { if (gate.parentNode) gate.parentNode.removeChild(gate); }
   var inp = "width:100%;height:42px;padding:0 12px;border:1px solid var(--line,#e0e5ea);border-radius:8px;background:var(--surface-2,#f7f9fb);color:inherit;font:inherit;margin-top:6px";
   var btn = "width:100%;height:44px;border-radius:8px;border:0;background:var(--accent,#2a78d6);color:var(--accent-ink,#fff);font:inherit;font-weight:600;margin-top:14px";
@@ -43,8 +46,10 @@
     f.addEventListener("submit", function (e) { e.preventDefault(); go(false); });
     document.getElementById("gNew").addEventListener("click", function () { go(true); });
   }
-  if (!configured) {
-    showGate('<h1 style="margin:0 0 8px;font-size:20px">Нужна настройка</h1><p style="margin:0;font-size:14px;line-height:1.5">В файле <b>config.js</b> ещё не вставлены данные Firebase. Откройте инструкцию из README и вставьте настройки проекта.</p>');
+  if (!hasCfg) {
+    showGate('<h1 style="margin:0 0 8px;font-size:20px">Нужна настройка</h1><p style="margin:0;font-size:14px;line-height:1.5">В файле <b>config.js</b> не заполнены данные Firebase (там остались слова PASTE_...). Вставьте настройки проекта из Firebase и загрузите файл в репозиторий заново.</p>');
+  } else if (!hasSdk) {
+    showGate('<h1 style="margin:0 0 8px;font-size:20px">Firebase не загрузился</h1><p style="margin:0;font-size:14px;line-height:1.5">Не загрузились скрипты Firebase с сайта gstatic.com. Проверьте интернет и отключите блокировщик рекламы для этой страницы, затем обновите её.</p>');
   }
 
   /* ---------- database wrapper (same calls the page makes) ---------- */
@@ -130,9 +135,16 @@
 
   /* ---------- start ---------- */
   if (configured) {
-    try { firebase.initializeApp(cfg); } catch (e) {}
-    fs = firebase.firestore(); auth = firebase.auth();
-    fs.enablePersistence({ synchronizeTabs: true }).catch(function () {});
+    try {
+      firebase.initializeApp(cfg);
+      fs = firebase.firestore(); auth = firebase.auth();
+      fs.enablePersistence({ synchronizeTabs: true }).catch(function () {});
+    } catch (e) {
+      configured = false;
+      showGate('<h1 style="margin:0 0 8px;font-size:20px">Ошибка запуска</h1><p style="margin:0;font-size:14px;line-height:1.5">' + String(e && e.message || e).replace(/</g, "&lt;") + "</p>");
+    }
+  }
+  if (configured) {
     var started = false;
     auth.onAuthStateChanged(function (u) {
       if (!u) { if (started) { location.reload(); return; } loginScreen(); return; }
