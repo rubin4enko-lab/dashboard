@@ -243,6 +243,8 @@ table.earn tr.cur td { background: var(--surface-2); }
 .item .field input, .item .field select { background: var(--surface); }
 .item-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; align-items: end; }
 .item-grid .field.wide { grid-column: span 2; }
+.giftck { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.giftck input { width: 18px; height: 18px; }
 .item-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 10px; flex-wrap: wrap; font-size: 13px; color: var(--ink-2); }
 .items-foot { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
 td.itemcell .line { display: block; margin-bottom: 4px; }
@@ -748,7 +750,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function calcItem(it) {
     var qty = Number(it.qty) || 0, buy = Number(it.buy) || 0, sell = Number(it.sell) || 0;
     var revenue = sell * qty, cost = buy * qty, margin = revenue - cost;
-    var rec = buy > 0 ? calcSell(buy) : 0, lost = rec > sell ? (rec - sell) * qty : 0;
+    var rec = buy > 0 ? calcSell(buy) : 0, lost = !it.gift && !it.atcost && rec > sell ? (rec - sell) * qty : 0;
     return { revenue: revenue, cost: cost, margin: margin, income: margin * rateK(), lost: lost };
   }
   function calc(s) {
@@ -1134,7 +1136,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var rows = list.map(function (s) {
       var c = calc(s), k = st(s), paid = k === "paid", pc = pctOf(c), low = lowMargin(c);
       var lines = itemsOf(s).map(function (it) {
-        return '<span class="line"><span class="cat">' + esc(catName(it.category)) + "</span>" + esc(it.name) + ' <span class="mono muted">× ' + esc(it.qty) + "</span></span>";
+        return '<span class="line"><span class="cat">' + esc(catName(it.category)) + "</span>" + esc(it.name) + ' <span class="mono muted">× ' + esc(it.qty) + "</span>" + (it.gift ? ' <span class="cat">подарок</span>' : "") + (it.atcost ? ' <span class="cat">по себестоимости</span>' : "") + "</span>";
       }).join("");
       var sub = (s.deal || s.url ? '<span class="sub">' + (saleUrl(s) ? dealTag(s.deal || "CRM", saleUrl(s), "") : "№ " + esc(s.deal)) + "</span>" : "") + (s.phone ? '<span class="sub">' + esc(s.phone) + "</span>" : "");
       var incTxt = nf2.format(r2(c.income));
@@ -1635,7 +1637,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   });
   $("saleForm").addEventListener("submit", function (e) {
     e.preventDefault(); if (!needDb()) return;
-    var items = readItems().map(function (i) { return { category: i.category, name: i.name, qty: i.qty, buy: i.buy, sell: i.sell }; });
+    var items = readItems().map(function (i) { return { category: i.category, name: i.name, qty: i.qty, buy: i.buy, sell: i.sell, gift: !!i.gift, atcost: !!i.atcost }; });
     var status = $("sStatus").value, ts = Date.now();
     var rec = { date: $("sDate").value, client: $("sClient").value.trim(), phone: $("sPhone").value.trim(), deal: $("sDeal").value.trim(), url: normUrl($("sUrl").value), items: items, status: status, statusAt: ts, history: [{ s: status, at: ts }], createdAt: ts };
     var ex = Number($("sExpense").value) || 0; if (ex > 0) rec.expense = ex;
@@ -1658,6 +1660,16 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var t = ev.target; if (!t || !t.getAttribute) return;
     var k = t.getAttribute("data-k"), r = t.closest ? t.closest(".item") : null; if (!r) return;
     var sellEl = r.querySelector('[data-k="sell"]');
+    var gEl = r.querySelector('[data-k="gift"]'), cEl = r.querySelector('[data-k="atcost"]'), buyEl = r.querySelector('[data-k="buy"]');
+    if (k === "gift" || k === "atcost") {
+      if (t.checked) {
+        (k === "gift" ? cEl : gEl).checked = false;
+        sellEl.value = k === "gift" ? "0" : (buyEl.value === "" ? "" : String(Number(buyEl.value)));
+        r.setAttribute("data-manual", "1");
+      } else { r.removeAttribute("data-manual"); var b0 = Number(buyEl.value); sellEl.value = b0 > 0 ? String(calcSell(b0)) : ""; }
+      return;
+    }
+    if (k === "buy" && cEl.checked) { sellEl.value = t.value; return; }
     if (k === "sell") { r.setAttribute("data-manual", t.value === "" ? "" : "1"); return; }
     if (k !== "buy" || r.getAttribute("data-manual")) return;
     var b = Number(t.value);
@@ -1673,7 +1685,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       '<div class="field"><label for="iq' + n + '">Кол-во, шт.</label><input id="iq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" value="1" required inputmode="numeric"></div>' +
       '<div class="field"><label for="ib' + n + '">Закуп за 1 шт.</label><input id="ib' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
       '<div class="field"><label for="is' + n + '">Продажа за 1 шт. (авто по закупу)</label><input id="is' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
-      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
+      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><label class="giftck"><input type="checkbox" data-k="gift"> Подарок</label> <label class="giftck"><input type="checkbox" data-k="atcost"> По себестоимости</label><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
   }
   function syncRm() { var rows = $("saleItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
   function addItemRow() {
@@ -1684,7 +1696,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function rowVal(r, k) { return r.querySelector('[data-k="' + k + '"]').value; }
   function readItems() {
     return Array.prototype.map.call($("saleItems").querySelectorAll(".item"), function (r) {
-      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")) };
+      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")), gift: r.querySelector('[data-k="gift"]').checked, atcost: r.querySelector('[data-k="atcost"]').checked };
     });
   }
   function updatePreview() { renderPreview($("saleItems"), $("salePreview"), $("sExpense")); }
@@ -1693,8 +1705,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     box.querySelectorAll(".item").forEach(function (r) {
       var b = rowVal(r, "buy"), s = rowVal(r, "sell"), q = Number(rowVal(r, "qty")), cel = r.querySelector("[data-calc]");
       if (b === "" || s === "" || !(q > 0)) { cel.textContent = "Введите закуп и цену продажи"; return; }
-      var it = { qty: q, buy: b, sell: s }, c = calcItem(it), p = pctOf(c); filled.push(it);
-      cel.innerHTML = "Маржа <b class=\"mono" + (c.margin < 0 ? " neg" : "") + "\">" + money(c.margin) + "</b>" + (p !== null ? " (" + nf1.format(p) + "%)" : "") + " · ваш доход <b class=\"mono" + (c.income < 0 ? " neg" : "") + "\">" + money(c.income) + "</b>" + (c.lost > 0 ? ' · <span class="warnline">недобрано маржи ' + money(c.lost) + " (по калькулятору " + money(calcSell(Number(b))) + ")</span>" : "") + (p !== null && p < min ? ' <span class="warnline">низкая маржа, порог ' + nf1.format(min) + "%</span>" : "");
+      var it = { qty: q, buy: b, sell: s, gift: r.querySelector('[data-k="gift"]').checked, atcost: r.querySelector('[data-k="atcost"]').checked }, c = calcItem(it), p = pctOf(c); filled.push(it);
+      cel.innerHTML = "Маржа <b class=\"mono" + (c.margin < 0 ? " neg" : "") + "\">" + money(c.margin) + "</b>" + (p !== null ? " (" + nf1.format(p) + "%)" : "") + " · ваш доход <b class=\"mono" + (c.income < 0 ? " neg" : "") + "\">" + money(c.income) + "</b>" + (it.atcost ? ' · <span class="muted">по себестоимости: маржа 0, недобор не считается</span>' : "") + (it.gift ? ' · <span class="muted">подарок: закуп вычтен, недобор не считается</span>' : "") + (c.lost > 0 ? ' · <span class="warnline">недобрано маржи ' + money(c.lost) + " (по калькулятору " + money(calcSell(Number(b))) + ")</span>" : "") + (p !== null && p < min ? ' <span class="warnline">низкая маржа, порог ' + nf1.format(min) + "%</span>" : "");
     });
     if (!filled.length) { el.textContent = "Введите закуп и цену продажи, и здесь появится ваш доход."; return; }
     var t = calc({ items: filled }), tp = pctOf(t), ex = Number(expEl.value) || 0;
@@ -1704,7 +1716,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       (tp !== null && tp < min ? '<span class="warnline">Маржа по сделке ниже порога ' + nf1.format(min) + "%</span>" : "");
   }
   $("saleForm").addEventListener("input", function (e) { autoSell($("saleItems"), e);  if (e.target.id === "sPhone") saleHint(); updatePreview(); });
-  $("saleForm").addEventListener("change", updatePreview);
+  $("saleForm").addEventListener("change", function (e) { if (/^(gift|atcost)$/.test(e.target.getAttribute("data-k"))) autoSell($("saleItems"), e); updatePreview(); });
   $("saleItems").addEventListener("click", function (e) {
     var b = e.target.closest("[data-rm]"); if (!b) return;
     b.closest(".item").remove(); syncRm(); updatePreview();
@@ -1754,13 +1766,13 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var cat = "other"; CATS.forEach(function (c) { if (c.id === it.category) cat = c.id; });
     var opts = CATS.map(function (c) { return '<option value="' + c.id + '"' + (c.id === cat ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("");
     var qty = it.qty == null || it.qty === "" ? 1 : it.qty;
-    return '<div class="item"' + (it.sell ? ' data-manual="1"' : '') + '><div class="item-grid">' +
+    return '<div class="item"' + (it.sell || it.gift || it.atcost ? ' data-manual="1"' : '') + '><div class="item-grid">' +
       '<div class="field"><label for="xc' + n + '">Категория</label><select id="xc' + n + '" data-k="category">' + opts + "</select></div>" +
       '<div class="field wide"><label for="xn' + n + '">Товар</label><input id="xn' + n + '" data-k="name" required value="' + esc(it.name) + '" placeholder="Холодильник Atlant XM 4421"></div>' +
       '<div class="field"><label for="xq' + n + '">Кол-во, шт.</label><input id="xq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" required inputmode="numeric" value="' + esc(qty) + '"></div>' +
       '<div class="field"><label for="xb' + n + '">Закуп за 1 шт.</label><input id="xb' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.buy) + '"></div>' +
       '<div class="field"><label for="xs' + n + '">Продажа за 1 шт. (авто по закупу)</label><input id="xs' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.sell) + '"></div>' +
-      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
+      '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><label class="giftck"><input type="checkbox" data-k="gift"' + (it.gift ? ' checked' : '') + '> Подарок</label> <label class="giftck"><input type="checkbox" data-k="atcost"' + (it.atcost ? ' checked' : '') + '> По себестоимости</label><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
   }
   function syncEditRm() { var rows = $("editItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
   function addEditRow(it) {
@@ -1770,7 +1782,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   }
   function readEditItems() {
     return Array.prototype.map.call($("editItems").querySelectorAll(".item"), function (r) {
-      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")) };
+      return { category: rowVal(r, "category"), name: rowVal(r, "name").trim(), qty: Number(rowVal(r, "qty")), buy: Number(rowVal(r, "buy")), sell: Number(rowVal(r, "sell")), gift: r.querySelector('[data-k="gift"]').checked, atcost: r.querySelector('[data-k="atcost"]').checked };
     });
   }
   function editPreview() { renderPreview($("editItems"), $("editPreview"), $("eExpense")); }
@@ -1798,7 +1810,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     if (o && document.body.contains(o)) o.focus({ preventScroll: true });
   }
   $("editForm").addEventListener("input", function (e) { autoSell($("editItems"), e); editPreview(); });
-  $("editForm").addEventListener("change", editPreview);
+  $("editForm").addEventListener("change", function (e) { if (/^(gift|atcost)$/.test(e.target.getAttribute("data-k"))) autoSell($("editItems"), e); editPreview(); });
   $("editItems").addEventListener("click", function (e) {
     var b = e.target.closest("[data-rm]"); if (!b) return;
     b.closest(".item").remove(); syncEditRm(); editPreview();
