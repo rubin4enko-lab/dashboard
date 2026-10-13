@@ -748,19 +748,20 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function calcItem(it) {
     var qty = Number(it.qty) || 0, buy = Number(it.buy) || 0, sell = Number(it.sell) || 0;
     var revenue = sell * qty, cost = buy * qty, margin = revenue - cost;
-    return { revenue: revenue, cost: cost, margin: margin, income: margin * rateK() };
+    var rec = buy > 0 ? calcSell(buy) : 0, lost = rec > sell ? (rec - sell) * qty : 0;
+    return { revenue: revenue, cost: cost, margin: margin, income: margin * rateK(), lost: lost };
   }
   function calc(s) {
-    var t = { revenue: 0, cost: 0, margin: 0, income: 0 };
-    itemsOf(s).forEach(function (it) { var c = calcItem(it); t.revenue += c.revenue; t.cost += c.cost; t.margin += c.margin; });
+    var t = { revenue: 0, cost: 0, margin: 0, income: 0, lost: 0 };
+    itemsOf(s).forEach(function (it) { var c = calcItem(it); t.revenue += c.revenue; t.cost += c.cost; t.margin += c.margin; t.lost += c.lost; });
     t.income = t.margin * rateK();
     return t;
   }
   function expOf(s) { return Number(s.expense) || 0; }
   function pctOf(c) { return c.revenue > 0 ? c.margin / c.revenue * 100 : null; }
   function sumSales(list) {
-    var t = { revenue: 0, margin: 0, income: 0, expense: 0, count: list.length, items: 0 };
-    list.forEach(function (s) { var c = calc(s); t.revenue += c.revenue; t.margin += c.margin; t.income += c.income; t.expense += expOf(s); t.items += itemsOf(s).length; });
+    var t = { revenue: 0, margin: 0, income: 0, expense: 0, lost: 0, count: list.length, items: 0 };
+    list.forEach(function (s) { var c = calc(s); t.lost += c.lost; t.revenue += c.revenue; t.margin += c.margin; t.income += c.income; t.expense += expOf(s); t.items += itemsOf(s).length; });
     return t;
   }
   function paidKey(s) { return String(s.paidDate || s.date).slice(0, 7); }
@@ -845,6 +846,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     $("kpiRevenueSub").textContent = cur.count ? "средний чек " + money(cur.revenue / cur.count) : " ";
     $("kpiMargin").textContent = money(cur.margin);
     $("kpiMarginSub").textContent = cur.revenue > 0 ? "наценка " + nf1.format(cur.margin / cur.revenue * 100) + "% от выручки" : " ";
+    if (cur.lost > 0) $("kpiMarginSub").textContent += " · недобрано " + money(cur.lost);
     $("kpiCount").textContent = String(cur.count);
     var open = state.sales.filter(isOpen).length;
     $("kpiCountSub").textContent = open ? "в работе ещё " + open : (cur.count ? cur.items + " " + plural(cur.items, "позиция", "позиции", "позиций") : " ");
@@ -1142,14 +1144,14 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
         "<td>" + esc(s.client) + sub + "</td>" +
         '<td class="itemcell">' + lines + "</td>" +
         '<td class="num">' + nf2.format(r2(c.revenue)) + "</td>" +
-        '<td class="num' + (c.margin < 0 ? " neg" : "") + '">' + nf2.format(r2(c.margin)) + (pc !== null ? '<span class="sub' + (low ? " low" : "") + '"' + (low ? ' title="Маржа ниже порога ' + nf1.format(state.settings.minMargin) + '%"' : "") + ">" + nf1.format(pc) + "%" + (low ? " низкая" : "") + "</span>" : "") + "</td>" +
+        '<td class="num' + (c.margin < 0 ? " neg" : "") + '">' + nf2.format(r2(c.margin)) + (pc !== null ? '<span class="sub' + (low ? " low" : "") + '"' + (low ? ' title="Маржа ниже порога ' + nf1.format(state.settings.minMargin) + '%"' : "") + ">" + nf1.format(pc) + "%" + (low ? " низкая" : "") + "</span>" : "") + (c.lost > 0 ? '<span class="sub low" title="Разница с ценой по калькулятору">недобрано ' + nf2.format(r2(c.lost)) + "</span>" : "") + "</td>" +
         '<td class="num' + (c.income < 0 ? " neg" : "") + '">' + inc + exp + "</td>" +
         '<td class="stcell">' + statusCell(s) + "</td>" +
         '<td class="actcell"><button class="icon-btn sm" type="button" data-edit="1">Изменить</button><button class="icon-btn sm" type="button" data-act="taskfor">Задача</button><button class="icon-btn sm" type="button" data-act="delsale" aria-label="Удалить продажу">Удалить</button></td></tr>';
     }).join("");
     var t = sumSales(list);
     box.innerHTML = '<table class="sales"><thead><tr><th>Дата</th><th>Покупатель</th><th>Товары</th><th class="num">Выручка</th><th class="num">Маржа</th><th class="num">Ваш доход</th><th>Статус</th><th></th></tr></thead><tbody>' + rows +
-      '</tbody><tfoot><tr><td colspan="3">Итого по списку</td><td class="num">' + nf2.format(r2(t.revenue)) + '</td><td class="num">' + nf2.format(r2(t.margin)) + '</td><td class="num">' + nf2.format(r2(t.income)) + "</td><td colspan=\"2\"></td></tr></tfoot></table>" +
+      '</tbody><tfoot><tr><td colspan="3">Итого по списку</td><td class="num">' + nf2.format(r2(t.revenue)) + '</td><td class="num">' + nf2.format(r2(t.margin)) + (t.lost > 0 ? '<span class="sub low">недобрано ' + nf2.format(r2(t.lost)) + "</span>" : "") + '</td><td class="num">' + nf2.format(r2(t.income)) + "</td><td colspan=\"2\"></td></tr></tfoot></table>" +
       '<p class="muted" style="font-size:12px;margin-top:8px">Серый доход ещё не засчитан: он попадёт в итоги месяца, когда статус станет «Оплачено». Кнопка «Изменить» открывает продажу для правки: дата, товары, цены, расходы.</p>';
   }
 
@@ -1650,6 +1652,17 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     }).catch(fail);
   });
 
+  /* калькулятор цены продажи: закуп -> продажа */
+  function calcSell(e){if(e===0)return 0;let t;return e<=100||e<=200?t=e*2+400+300+75:e<=300?t=e*2+350+300+75:e<=400?t=e*2+300+300+75:e<=500?t=1575:e<=600?t=e*2+200+500+100:e<=700?t=e*2+150+500+100:e<=800?t=e*2+100+500+100:e<=900?t=e*2+25+500+100:e<=1e3?t=e*1.95+500+100:e<=1100?t=e*1.88+500+100:e<=1200?t=e*1.87+500+100:e<=1300?t=e*1.86+500+100:e<=1400?t=e*1.85+500+100:e<=1500?t=e*1.8+500+100:e<=1600?t=e*1.79+500+100:e<=1700?t=e*1.78+500+100:e<=1800?t=e*1.77+500+100:e<=1900?t=e*1.76+500+100:e<=2e3?t=e*1.75+500+100:e<=2100?t=e*1.74+500+150:e<=2200?t=e*1.73+500+150:e<=2300?t=e*1.72+500+150:e<=2400?t=e*1.71+500+150:e<=2500||e<=2600?t=e*1.7+500+150:e<=2700?t=e*1.69+500+150:e<=2800?t=e*1.68+500+150:e<=2900?t=e*1.67+500+150:e<=3e3?t=e*1.66+500+150:e<=3100?t=e*1.65+500+150:e<=3200?t=e*1.64+500+150:e<=3300?t=e*1.63+500+150:e<=3400?t=e*1.62+500+150:e<=3500?t=e*1.61+500+150:e<=3600?t=e*1.6+500+150:e<=3700?t=e*1.59+500+150:e<=3800?t=e*1.58+500+150:e<=3900||e<=4e3?t=e*1.57+500+150:e<=4100||e<=4200||e<=4300||e<=4400?t=e*1.57+500+175:e<=4500||e<=4600||e<=4700||e<=4800||e<=4900?t=e*1.565+500+175:e<=5e3||e<=5100||e<=5200||e<=5300||e<=5400||e<=5500||e<=5600||e<=5700||e<=5800||e<=5900||e<=6e3?t=e*1.562+500+175:e<=6100||e<=6200||e<=6300||e<=6400||e<=6500||e<=6600||e<=6700||e<=6800||e<=6900||e<=7e3?t=e*1.555+500+225:e<=7100||e<=7200||e<=7300||e<=7400||e<=7500||e<=7600||e<=7700||e<=7800||e<=7900||e<=8e3?t=e*1.55+500+225:e<=8100?t=e*1.55+500+300:e<=8200||e<=8300||e<=8400||e<=8500||e<=8600||e<=8700||e<=8800||e<=8900||e<=9e3||e<=9100?t=e*1.5455+500+300:e<=9200||e<=9300||e<=9400||e<=9500||e<=9600||e<=9700||e<=9800||e<=9900||e<=1e4?t=e*1.54+500+300:e<=10100||e<=10200||e<=10300||e<=10400||e<=10500||e<=10600||e<=10700||e<=10800||e<=10900?t=e*1.535+500+500:e<=11e3||e<=11100||e<=11200||e<=11300||e<=11400||e<=11500||e<=11600||e<=11700||e<=11800||e<=11900?t=e*1.531+500+500:e<=12e3||e<=12100||e<=12200||e<=12300||e<=12400||e<=12500||e<=12600||e<=12700||e<=12800||e<=12900?t=e*1.528+500+500:e<=13e3||e<=13100||e<=13200||e<=13300||e<=13400||e<=13500||e<=13600||e<=13700||e<=13800?t=e*1.525+500+500:e<=13900?t=e*1.5+500+500:t=e*1.5+500,e>=1e3&&(t=t*1.165),Math.round(t)}
+  function autoSell(box, ev) {
+    var t = ev.target; if (!t || !t.getAttribute) return;
+    var k = t.getAttribute("data-k"), r = t.closest ? t.closest(".item") : null; if (!r) return;
+    var sellEl = r.querySelector('[data-k="sell"]');
+    if (k === "sell") { r.setAttribute("data-manual", t.value === "" ? "" : "1"); return; }
+    if (k !== "buy" || r.getAttribute("data-manual")) return;
+    var b = Number(t.value);
+    sellEl.value = t.value === "" || !(b > 0) ? "" : String(calcSell(b));
+  }
   /* sale items: one sale can hold several products */
   var itemSeq = 0;
   function itemRowHtml(n) {
@@ -1659,7 +1672,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       '<div class="field wide"><label for="in' + n + '">Товар</label><input id="in' + n + '" data-k="name" required placeholder="Холодильник Atlant XM 4421"></div>' +
       '<div class="field"><label for="iq' + n + '">Кол-во, шт.</label><input id="iq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" value="1" required inputmode="numeric"></div>' +
       '<div class="field"><label for="ib' + n + '">Закуп за 1 шт.</label><input id="ib' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
-      '<div class="field"><label for="is' + n + '">Продажа за 1 шт.</label><input id="is' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
+      '<div class="field"><label for="is' + n + '">Продажа за 1 шт. (авто по закупу)</label><input id="is' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal"></div>' +
       '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
   }
   function syncRm() { var rows = $("saleItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
@@ -1681,15 +1694,16 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       var b = rowVal(r, "buy"), s = rowVal(r, "sell"), q = Number(rowVal(r, "qty")), cel = r.querySelector("[data-calc]");
       if (b === "" || s === "" || !(q > 0)) { cel.textContent = "Введите закуп и цену продажи"; return; }
       var it = { qty: q, buy: b, sell: s }, c = calcItem(it), p = pctOf(c); filled.push(it);
-      cel.innerHTML = "Маржа <b class=\"mono" + (c.margin < 0 ? " neg" : "") + "\">" + money(c.margin) + "</b>" + (p !== null ? " (" + nf1.format(p) + "%)" : "") + " · ваш доход <b class=\"mono" + (c.income < 0 ? " neg" : "") + "\">" + money(c.income) + "</b>" + (p !== null && p < min ? ' <span class="warnline">низкая маржа, порог ' + nf1.format(min) + "%</span>" : "");
+      cel.innerHTML = "Маржа <b class=\"mono" + (c.margin < 0 ? " neg" : "") + "\">" + money(c.margin) + "</b>" + (p !== null ? " (" + nf1.format(p) + "%)" : "") + " · ваш доход <b class=\"mono" + (c.income < 0 ? " neg" : "") + "\">" + money(c.income) + "</b>" + (c.lost > 0 ? ' · <span class="warnline">недобрано маржи ' + money(c.lost) + " (по калькулятору " + money(calcSell(Number(b))) + ")</span>" : "") + (p !== null && p < min ? ' <span class="warnline">низкая маржа, порог ' + nf1.format(min) + "%</span>" : "");
     });
     if (!filled.length) { el.textContent = "Введите закуп и цену продажи, и здесь появится ваш доход."; return; }
     var t = calc({ items: filled }), tp = pctOf(t), ex = Number(expEl.value) || 0;
     el.innerHTML = "<span>Товаров <b class=\"mono\">" + filled.length + "</b></span><span>Выручка <b class=\"mono\">" + money(t.revenue) + "</b></span><span>Маржа <b class=\"mono" + (t.margin < 0 ? " neg" : "") + "\">" + money(t.margin) + "</b>" + (tp !== null ? " (" + nf1.format(tp) + "%)" : "") + "</span><span>Ваш доход (10%) <b class=\"mono" + (t.income < 0 ? " neg" : "") + "\">" + money(t.income) + "</b></span>" +
       (ex > 0 ? "<span>Расходы <b class=\"mono\">−" + money(ex) + "</b>, чистыми <b class=\"mono" + (t.income - ex < 0 ? " neg" : "") + "\">" + money(t.income - ex) + "</b></span>" : "") +
+      (t.lost > 0 ? '<span class="warnline">Недобрано маржи <b class="mono">' + money(t.lost) + "</b> против калькулятора</span>" : "") +
       (tp !== null && tp < min ? '<span class="warnline">Маржа по сделке ниже порога ' + nf1.format(min) + "%</span>" : "");
   }
-  $("saleForm").addEventListener("input", function (e) { if (e.target.id === "sPhone") saleHint(); updatePreview(); });
+  $("saleForm").addEventListener("input", function (e) { autoSell($("saleItems"), e);  if (e.target.id === "sPhone") saleHint(); updatePreview(); });
   $("saleForm").addEventListener("change", updatePreview);
   $("saleItems").addEventListener("click", function (e) {
     var b = e.target.closest("[data-rm]"); if (!b) return;
@@ -1740,12 +1754,12 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var cat = "other"; CATS.forEach(function (c) { if (c.id === it.category) cat = c.id; });
     var opts = CATS.map(function (c) { return '<option value="' + c.id + '"' + (c.id === cat ? " selected" : "") + ">" + esc(c.name) + "</option>"; }).join("");
     var qty = it.qty == null || it.qty === "" ? 1 : it.qty;
-    return '<div class="item"><div class="item-grid">' +
+    return '<div class="item"' + (it.sell ? ' data-manual="1"' : '') + '><div class="item-grid">' +
       '<div class="field"><label for="xc' + n + '">Категория</label><select id="xc' + n + '" data-k="category">' + opts + "</select></div>" +
       '<div class="field wide"><label for="xn' + n + '">Товар</label><input id="xn' + n + '" data-k="name" required value="' + esc(it.name) + '" placeholder="Холодильник Atlant XM 4421"></div>' +
       '<div class="field"><label for="xq' + n + '">Кол-во, шт.</label><input id="xq' + n + '" class="mono" data-k="qty" type="number" min="1" step="1" required inputmode="numeric" value="' + esc(qty) + '"></div>' +
       '<div class="field"><label for="xb' + n + '">Закуп за 1 шт.</label><input id="xb' + n + '" class="mono" data-k="buy" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.buy) + '"></div>' +
-      '<div class="field"><label for="xs' + n + '">Продажа за 1 шт.</label><input id="xs' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.sell) + '"></div>' +
+      '<div class="field"><label for="xs' + n + '">Продажа за 1 шт. (авто по закупу)</label><input id="xs' + n + '" class="mono" data-k="sell" type="number" min="0" step="0.01" required inputmode="decimal" value="' + esc(it.sell) + '"></div>' +
       '</div><div class="item-foot"><span data-calc>Введите закуп и цену продажи</span><button type="button" class="icon-btn" data-rm="1">Убрать товар</button></div></div>';
   }
   function syncEditRm() { var rows = $("editItems").querySelectorAll(".item"); rows.forEach(function (r) { r.querySelector("[data-rm]").hidden = rows.length < 2; }); }
@@ -1783,7 +1797,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     var o = editOpener; editOpener = null;
     if (o && document.body.contains(o)) o.focus({ preventScroll: true });
   }
-  $("editForm").addEventListener("input", editPreview);
+  $("editForm").addEventListener("input", function (e) { autoSell($("editItems"), e); editPreview(); });
   $("editForm").addEventListener("change", editPreview);
   $("editItems").addEventListener("click", function (e) {
     var b = e.target.closest("[data-rm]"); if (!b) return;
