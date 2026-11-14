@@ -551,6 +551,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       <div class="card-head">
         <h2 id="salesTitle">Сделки</h2>
         <div class="btnrow">
+          <label class="giftck" id="cancelWrap" style="font-size:13px"><input type="checkbox" id="cancelToggle" checked> Учитывать отказы</label>
           <select class="sortsel" id="salesSort" aria-label="Сортировка сделок">
             <option value="auto">Сортировка: по умолчанию</option>
             <option value="date-desc">Дата: новые сверху</option>
@@ -688,7 +689,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   var $ = function (id) { return document.getElementById(id); };
   var state = {
     tasks: [], sales: [], gotTasks: false, gotSales: false,
-    sort: "auto", filter: "all", day: "", tab: "tasks", stage: "open", q: "", openClient: "",
+    sort: "auto", filter: "all", day: "", tab: "tasks", stage: "open", q: "", openClient: "", cancelled: true,
     settings: { goal: 0, minMargin: 10, followupMonths: 3, staleBuy: 5, staleShip: 10 },
     db: null, downloads: null, cidx: { list: [], map: {} }
   };
@@ -1064,7 +1065,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
     if (id === "purchasing" || id === "delivery") return state.sales.filter(function (s) { return st(s) === id; });
     if (id === "paid") return paidOfMonth(view.y, view.m);
     if (id === "claim" || id === "cancelled") return state.sales.filter(function (s) { return st(s) === id && statusKey(s) === k; });
-    return state.sales.filter(function (s) { return String(s.date).slice(0, 7) === k; });
+    return state.sales.filter(function (s) { return String(s.date).slice(0, 7) === k && (state.cancelled || st(s) !== "cancelled"); });
   }
   function renderStages() {
     var tiles = [{ id: "open", name: "В работе", cls: "", amt: "ожидается" }]
@@ -1092,7 +1093,7 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
       case "paid": return "Оплачено, " + m;
       case "claim": return "Рекламации, " + m;
       case "cancelled": return "Отказы, " + m;
-      default: return "Все сделки, " + m;
+      default: return "Все сделки, " + m + (state.cancelled ? "" : ", без отказов");
     }
   }
   function statusCell(s) {
@@ -1111,6 +1112,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   function renderSales() {
     var box = $("salesTable");
     $("salesTitle").textContent = stageTitle();
+    $("cancelWrap").hidden = !(state.stage === "all" && !state.q);
+    $("cancelToggle").checked = state.cancelled;
     var openN = state.sales.filter(isOpen).length;
     $("nSales").textContent = openN ? String(openN) : "";
     if (!state.gotSales) { box.innerHTML = '<div class="empty">Загружаю продажи…</div>'; return; }
@@ -1919,6 +1922,8 @@ body { margin: 0; padding-top: calc(20px + env(safe-area-inset-top, 0px)); paddi
   $("salesSort").addEventListener("change", function () { state.sort = this.value; try { localStorage.setItem("salesSort", this.value); } catch (e) {} renderSales(); });
   $("exportMonth").addEventListener("click", function () { exportCsv(state.sales.filter(function (s) { return String(s.date).slice(0, 7) === monthKey(); }), "prodazhi-" + monthKey() + ".csv"); });
   $("exportAll").addEventListener("click", function () { exportCsv(state.sales, "prodazhi-vse.csv"); });
+  try { if (localStorage.getItem("salesCancelled") === "0") state.cancelled = false; } catch (e) {}
+  $("cancelToggle").addEventListener("change", function () { state.cancelled = this.checked; try { localStorage.setItem("salesCancelled", this.checked ? "1" : "0"); } catch (e) {} renderSales(); });
 
   /* ---------- boot ---------- */
   var td = ymd(new Date());
